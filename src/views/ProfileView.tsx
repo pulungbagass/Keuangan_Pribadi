@@ -48,10 +48,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleResetData = () => {
-    // Clear transactions & reminders for user, then re-seed
+    // Clear transactions & reminders for user (100% clean state)
     try {
       localStorage.removeItem('ck_db_transactions');
-      localStorage.removeItem('ck_db_categories');
       localStorage.removeItem('ck_db_reminders');
       initializeUserDatabase(session.user);
       onReloadData();
@@ -201,10 +200,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 space-y-2 animate-in fade-in">
             <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>Reset data ke contoh bawaan?</span>
+              <span>Hapus dan kosongkan semua data transaksi & pengingat?</span>
             </p>
             <p className="text-[11px] text-rose-600">
-              Transaksi yang Anda buat akan digantikan dengan data contoh awal.
+              Seluruh riwayat transaksi dan tagihan akan dikosongkan (clear). Tindakan ini tidak dapat dibatalkan.
             </p>
             <div className="flex gap-2 pt-1">
               <button
@@ -217,16 +216,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 onClick={handleResetData}
                 className="flex-1 py-2 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-700"
               >
-                Ya, Reset
+                Ya, Kosongkan Semua
               </button>
             </div>
           </div>
         ) : (
           <button
             onClick={() => setResetConfirm(true)}
-            className="w-full py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold transition"
+            className="w-full py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 text-rose-600 hover:text-rose-700 text-xs font-semibold transition"
           >
-            Reset Contoh Data Awal
+            Kosongkan Semua Data Transaksi & Tagihan
           </button>
         )}
 

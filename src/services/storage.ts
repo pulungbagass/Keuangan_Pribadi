@@ -44,6 +44,18 @@ function saveToStorage<T>(key: string, data: T): void {
   }
 }
 
+// Clean up any legacy dummy transactions and reminders
+const CLEANUP_KEY = 'ck_db_cleaned_all_dummy_data_v3';
+try {
+  if (typeof window !== 'undefined' && !localStorage.getItem(CLEANUP_KEY)) {
+    localStorage.removeItem(STORAGE_TRANSACTIONS_KEY);
+    localStorage.removeItem(STORAGE_REMINDERS_KEY);
+    localStorage.setItem(CLEANUP_KEY, 'true');
+  }
+} catch (e) {
+  console.warn('Storage cleanup notice', e);
+}
+
 // Ensure initial seed for user
 export function initializeUserDatabase(user: User): void {
   // 1. Check or register user
@@ -56,8 +68,6 @@ export function initializeUserDatabase(user: User): void {
   // 2. Check categories for user
   const categories = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
   const userCategories = categories.filter(c => c.user_id === user.id);
-
-  let initialCategories: Category[] = categories;
 
   if (userCategories.length === 0) {
     const newCategories: Category[] = [
@@ -80,169 +90,10 @@ export function initializeUserDatabase(user: User): void {
         is_default: true,
       })),
     ];
-    initialCategories = [...categories, ...newCategories];
-    saveToStorage(STORAGE_CATEGORIES_KEY, initialCategories);
+    saveToStorage(STORAGE_CATEGORIES_KEY, [...categories, ...newCategories]);
   }
 
-  // 3. Seed initial realistic transactions if none exist for user
-  const transactions = getFromStorage<Transaction[]>(STORAGE_TRANSACTIONS_KEY, []);
-  const userTransactions = transactions.filter(t => t.user_id === user.id);
-
-  if (userTransactions.length === 0) {
-    const now = new Date();
-    const subDays = (days: number, hoursOffset: number = 0) => {
-      const d = new Date(now);
-      d.setDate(d.getDate() - days);
-      d.setHours(d.getHours() - hoursOffset);
-      return d.toISOString();
-    };
-
-    const userCats = initialCategories.filter(c => c.user_id === user.id);
-    const getCatId = (name: string) => userCats.find(c => c.name.includes(name))?.id || userCats[0]?.id || 'cat_fallback';
-
-    const seedTransactions: Transaction[] = [
-      {
-        id: `tx_${Date.now()}_1`,
-        user_id: user.id,
-        category_id: getCatId('Gaji Pokok'),
-        type: 'income',
-        amount: 8500000,
-        transaction_date: subDays(4, 2),
-        details: {
-          location: 'Kantor Pusat Jakarta',
-          payment_method: 'Transfer Bank BCA',
-          notes: 'Gaji bulanan reguler',
-          tags: ['gaji', 'tetap'],
-        },
-        created_at: subDays(4, 2),
-      },
-      {
-        id: `tx_${Date.now()}_2`,
-        user_id: user.id,
-        category_id: getCatId('Belanja & Groceries'),
-        type: 'expense',
-        amount: 475000,
-        transaction_date: subDays(3, 4),
-        details: {
-          location: 'Superindo Tebet',
-          payment_method: 'QRIS BCA',
-          notes: 'Belanja stok bahan dapur mingguan & buah',
-          tags: ['groceries', 'dapur'],
-        },
-        created_at: subDays(3, 4),
-      },
-      {
-        id: `tx_${Date.now()}_3`,
-        user_id: user.id,
-        category_id: getCatId('Tagihan, Listrik & WiFi'),
-        type: 'expense',
-        amount: 380000,
-        transaction_date: subDays(2, 6),
-        details: {
-          location: 'MyIndiHome App',
-          payment_method: 'Mandiri Virtual Account',
-          notes: 'Tagihan internet rumah kecepatan 50 Mbps',
-          tags: ['tagihan', 'utilitas'],
-        },
-        created_at: subDays(2, 6),
-      },
-      {
-        id: `tx_${Date.now()}_4`,
-        user_id: user.id,
-        category_id: getCatId('Makanan & Minuman'),
-        type: 'expense',
-        amount: 58000,
-        transaction_date: subDays(1, 1),
-        details: {
-          location: 'Kopi Kenangan Senopati',
-          payment_method: 'GoPay',
-          notes: 'Kopi Kenangan Mantan + Roti Daging',
-          tags: ['kopi', 'snack'],
-        },
-        created_at: subDays(1, 1),
-      },
-      {
-        id: `tx_${Date.now()}_5`,
-        user_id: user.id,
-        category_id: getCatId('Transportasi & Bensin'),
-        type: 'expense',
-        amount: 150000,
-        transaction_date: subDays(0, 3),
-        details: {
-          location: 'SPBU Pertamina Kuningan',
-          payment_method: 'Tunai / Cash',
-          notes: 'Isi Pertamax full tank motor',
-          tags: ['bensin', 'transport'],
-        },
-        created_at: subDays(0, 3),
-      },
-      {
-        id: `tx_${Date.now()}_6`,
-        user_id: user.id,
-        category_id: getCatId('Freelance & Side Project'),
-        type: 'income',
-        amount: 1750000,
-        transaction_date: subDays(0, 1),
-        details: {
-          location: 'Remote Client',
-          payment_method: 'Transfer Bank Mandiri',
-          notes: 'Uang muka desain landing page UI/UX',
-          tags: ['freelance', 'desain'],
-        },
-        created_at: subDays(0, 1),
-      },
-    ];
-
-    saveToStorage(STORAGE_TRANSACTIONS_KEY, [...transactions, ...seedTransactions]);
-  }
-
-  // 4. Seed reminders if none exist
-  const reminders = getFromStorage<Reminder[]>(STORAGE_REMINDERS_KEY, []);
-  const userReminders = reminders.filter(r => r.user_id === user.id);
-
-  if (userReminders.length === 0) {
-    const today = new Date();
-    const formatDate = (daysOffset: number) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + daysOffset);
-      return d.toISOString().split('T')[0];
-    };
-
-    const seedReminders: Reminder[] = [
-      {
-        id: `rem_${Date.now()}_1`,
-        user_id: user.id,
-        title: 'Tagihan Listrik PLN Pascabayar',
-        amount: 450000,
-        due_date: formatDate(2),
-        status: 'pending',
-        notes: 'Bayar via m-BCA sebelum tanggal 20 agar tidak kena denda',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: `rem_${Date.now()}_2`,
-        user_id: user.id,
-        title: 'Langganan Netflix & Spotify Family',
-        amount: 235000,
-        due_date: formatDate(5),
-        status: 'pending',
-        notes: 'Auto-debit dari Kartu Jenius',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: `rem_${Date.now()}_3`,
-        user_id: user.id,
-        title: 'Cicilan Asuransi BPJS Kesehatan',
-        amount: 150000,
-        due_date: formatDate(-1),
-        status: 'paid',
-        notes: 'Sudah dibayar tepat waktu',
-        created_at: new Date().toISOString(),
-      },
-    ];
-
-    saveToStorage(STORAGE_REMINDERS_KEY, [...reminders, ...seedReminders]);
-  }
+  // 3. Transactions & Reminders are clean/empty by default (No dummy data)
 }
 
 // ---------------- CATEGORY OPERATIONS ----------------
