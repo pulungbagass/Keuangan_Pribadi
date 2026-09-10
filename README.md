@@ -4,6 +4,23 @@ Aplikasi pencatatan keuangan pribadi, full online (bukan PWA), dengan
 database Neon PostgreSQL. React + Vite di frontend, Vercel Serverless
 Function (Express) di backend.
 
+## Update terbaru: fix error 500 di /api/auth/register
+
+Kalau sebelumnya deploy sempat kena `500 Internal Server Error` dengan pesan
+generik "Gagal mendaftar ke database Neon.", itu bukan masalah database —
+penyebabnya adalah serverless function-nya **crash total** sebelum sempat
+menjalankan kode Express sama sekali, karena mismatch format module
+(ESM vs CommonJS) yang umum terjadi di Vercel saat `package.json` punya
+`"type": "module"`. Sudah diperbaiki dengan:
+- Menghapus `"type": "module"` dari `package.json` (default ke CommonJS,
+  format paling kompatibel untuk Vercel Node Functions).
+- Menambahkan `api/tsconfig.json` khusus (terpisah dari tsconfig root milik
+  Vite) supaya Vercel meng-compile `api/index.ts` ke CommonJS murni.
+
+Sudah divalidasi dengan cara benar-benar meng-compile `api/index.ts` ke JS
+dan menjalankannya di Node — tidak ada lagi error `exports is not defined
+in ES module scope` / `require is not defined in ES module scope`.
+
 ## Apa yang diperbaiki dari kode asli
 
 Kode ini awalnya dibuat dengan Google AI Studio dan tidak bisa langsung
