@@ -95,13 +95,13 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Right Action Tools: Session & Database */}
           <div className="flex items-center gap-2">
             {/* Neon DB Online status */}
-            <div
+            {/* <div
               className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-100"
               title="Terhubung ke Database Neon PostgreSQL"
             >
               <Database className="w-3 h-3 text-emerald-600" />
               <span>Neon Online</span>
-            </div>
+            </div> */}
 
             {/* Session Countdown Badge */}
             <button
