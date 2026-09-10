@@ -1,0 +1,6 @@
+{
+  "name": "Catatan Keuangan",
+  "description": "Aplikasi pencatatan keuangan pribadi mobile-first (PWA) dengan manajemen arus kas, kategori dinamis, detail transaksi fleksibel, pengingat tagihan, dan ekspor CSV.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
