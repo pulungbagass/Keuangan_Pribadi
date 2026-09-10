@@ -179,18 +179,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          <button
+          {/* <button
             type="button"
             onClick={() => setShowGuideModal(true)}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-300 hover:text-emerald-400 hover:border-emerald-500/40 text-[11px] font-semibold transition cursor-pointer"
           >
             <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
             <span>Info Neon DB</span>
-          </button>
+          </button> */}
         </div>
 
         {/* Database Connection Live Status Bar */}
-        <div className="mt-3 p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between text-[11px]">
+        {/* <div className="mt-3 p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between text-[11px]">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
@@ -213,7 +213,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           >
             Panduan
           </button>
-        </div>
+        </div> */}
       </header>
 
       {/* Main Authentication Card */}
@@ -344,7 +344,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-900/40 active:scale-98 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
               <LogIn className="w-4 h-4" />
-              <span>{isLoading ? 'Menghubungkan ke Neon...' : 'Masuk ke Akun'}</span>
+              <span>{isLoading ? 'LOADING...' : 'Masuk ke Akun'}</span>
             </button>
 
             <div className="pt-2 text-center">
