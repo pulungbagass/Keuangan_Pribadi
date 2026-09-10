@@ -1,9 +1,26 @@
-import { Category, Reminder, Transaction, User } from '../types';
+import { Category, Reminder, StoredUserAccount, Transaction, User } from '../types';
 
 const STORAGE_USERS_KEY = 'ck_db_users';
 const STORAGE_CATEGORIES_KEY = 'ck_db_categories';
 const STORAGE_TRANSACTIONS_KEY = 'ck_db_transactions';
 const STORAGE_REMINDERS_KEY = 'ck_db_reminders';
+
+// Hash helper for secure local password storage
+export async function hashPassword(password: string): Promise<string> {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const enc = new TextEncoder();
+      const data = enc.encode(password + '_ck_finance_salt_2026');
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {
+    console.warn('Crypto subtle fallback', e);
+  }
+  // Fallback simple string hash
+  return btoa(unescape(encodeURIComponent(password + '_salt')));
+}
 
 // Default categories template
 export const DEFAULT_EXPENSE_CATEGORIES = [
@@ -59,9 +76,9 @@ try {
 // Ensure initial seed for user
 export function initializeUserDatabase(user: User): void {
   // 1. Check or register user
-  const users = getFromStorage<User[]>(STORAGE_USERS_KEY, []);
+  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
   if (!users.some(u => u.id === user.id)) {
-    users.push(user);
+    users.push({ ...user });
     saveToStorage(STORAGE_USERS_KEY, users);
   }
 
@@ -94,6 +111,151 @@ export function initializeUserDatabase(user: User): void {
   }
 
   // 3. Transactions & Reminders are clean/empty by default (No dummy data)
+}
+
+// ---------------- USER DATABASE OPERATIONS ----------------
+export function getAllRegisteredUsers(): User[] {
+  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
+  return users.map(({ password_hash: _pass, ...rest }) => rest);
+}
+
+export function findUserByEmail(email: string): StoredUserAccount | null {
+  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
+  const cleanEmail = email.trim().toLowerCase();
+  return users.find(u => u.email.toLowerCase() === cleanEmail) || null;
+}
+
+export async function registerEmailUser(
+  name: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: User; error?: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = name.trim();
+
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { success: false, error: 'Format email tidak valid.' };
+  }
+  if (!cleanName) {
+    return { success: false, error: 'Nama lengkap wajib diisi.' };
+  }
+  if (!password || password.length < 6) {
+    return { success: false, error: 'Kata sandi minimal 6 karakter.' };
+  }
+
+  const existing = findUserByEmail(cleanEmail);
+  if (existing) {
+    return {
+      success: false,
+      error: 'Email ini sudah terdaftar. Silakan masuk melalui tab Masuk.',
+    };
+  }
+
+  const passHash = await hashPassword(password);
+  const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newUser: StoredUserAccount = {
+    id: userId,
+    email: cleanEmail,
+    name: cleanName,
+    image_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}&backgroundColor=059669`,
+    auth_provider: 'password',
+    created_at: new Date().toISOString(),
+    password_hash: passHash,
+  };
+
+  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
+  users.push(newUser);
+  saveToStorage(STORAGE_USERS_KEY, users);
+
+  // Initialize categories for new user
+  initializeUserDatabase(newUser);
+
+  const { password_hash: _pass, ...cleanUser } = newUser;
+  return { success: true, user: cleanUser };
+}
+
+export async function loginEmailUser(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: User; error?: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const user = findUserByEmail(cleanEmail);
+
+  if (!user) {
+    return {
+      success: false,
+      error: 'Akun dengan email ini belum terdaftar. Silakan buka tab Daftar untuk membuat akun baru.',
+    };
+  }
+
+  if (user.auth_provider === 'google' && !user.password_hash) {
+    return {
+      success: false,
+      error: 'Akun ini terdaftar dengan Akun Google. Silakan masuk menggunakan tombol Akun Google.',
+    };
+  }
+
+  const incomingHash = await hashPassword(password);
+  if (user.password_hash && user.password_hash !== incomingHash) {
+    return {
+      success: false,
+      error: 'Kata sandi salah. Mohon periksa kembali kata sandi Anda.',
+    };
+  }
+
+  initializeUserDatabase(user);
+
+  const { password_hash: _pass, ...cleanUser } = user;
+  return { success: true, user: cleanUser };
+}
+
+export function loginOrRegisterGoogleUser(googleData: {
+  email: string;
+  name: string;
+  image_url?: string;
+  googleSub?: string;
+}): { success: boolean; user: User } {
+  const cleanEmail = googleData.email.trim().toLowerCase();
+  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
+  let user = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+  if (!user) {
+    const userId = googleData.googleSub
+      ? `usr_google_${googleData.googleSub}`
+      : `usr_google_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    user = {
+      id: userId,
+      email: cleanEmail,
+      name: googleData.name.trim() || cleanEmail.split('@')[0],
+      image_url:
+        googleData.image_url ||
+        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(googleData.name || cleanEmail)}&backgroundColor=059669`,
+      auth_provider: 'google',
+      created_at: new Date().toISOString(),
+    };
+
+    users.push(user);
+    saveToStorage(STORAGE_USERS_KEY, users);
+  } else {
+    let updated = false;
+    if (googleData.name && user.name !== googleData.name) {
+      user.name = googleData.name;
+      updated = true;
+    }
+    if (googleData.image_url && user.image_url !== googleData.image_url) {
+      user.image_url = googleData.image_url;
+      updated = true;
+    }
+    if (updated) {
+      saveToStorage(STORAGE_USERS_KEY, users);
+    }
+  }
+
+  initializeUserDatabase(user);
+
+  const { password_hash: _pass, ...cleanUser } = user;
+  return { success: true, user: cleanUser };
 }
 
 // ---------------- CATEGORY OPERATIONS ----------------

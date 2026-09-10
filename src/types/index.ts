@@ -5,6 +5,12 @@ export interface User {
   email: string;
   name: string;
   image_url: string;
+  auth_provider?: 'google' | 'password';
+  created_at?: string;
+}
+
+export interface StoredUserAccount extends User {
+  password_hash?: string;
 }
 
 export interface Category {

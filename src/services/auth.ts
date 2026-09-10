@@ -1,14 +1,33 @@
 import { User, AuthSession } from '../types';
 
 const SESSION_STORAGE_KEY = 'ck_auth_session';
-const DEFAULT_MAX_AGE_MINUTES = 120; // 2 jam sesuai ringkasan brainstorming
+const DEFAULT_MAX_AGE_MINUTES = 120; // 2 jam
 
-export const DEFAULT_GOOGLE_USER: User = {
-  id: 'usr_google_pulung036',
-  email: 'pulungbagas036@gmail.com',
-  name: 'Bagas Pulung',
-  image_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-};
+// Helper to decode Google JWT ID Token from Google Identity Services (GSI)
+export function decodeGoogleCredential(credential: string): { sub: string; email: string; name: string; picture?: string } | null {
+  try {
+    const parts = credential.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const parsed = JSON.parse(jsonPayload);
+    return {
+      sub: parsed.sub || '',
+      email: parsed.email || '',
+      name: parsed.name || parsed.email?.split('@')[0] || '',
+      picture: parsed.picture || '',
+    };
+  } catch (err) {
+    console.warn('Failed to decode Google credential', err);
+    return null;
+  }
+}
 
 // Helper: encode base64url
 function base64UrlEncode(str: string): string {
