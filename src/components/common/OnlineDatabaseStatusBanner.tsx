@@ -53,7 +53,7 @@ export const OnlineDatabaseStatusBanner: React.FC = () => {
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-slate-950" />
           <span className="font-medium">
-            Database Neon belum terhubung. Harap pasang <code className="font-mono bg-amber-400/80 px-1 py-0.5 rounded font-bold">DATABASE_URL</code> di Secrets.
+            Database Neon belum terhubung. Harap pasang <code className="font-mono bg-amber-400/80 px-1 py-0.5 rounded font-bold">DATABASE_URL</code> di Environment Variables (Vercel).
           </span>
         </div>
         <button

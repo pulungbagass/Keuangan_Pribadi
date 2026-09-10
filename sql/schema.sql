@@ -1,17 +1,23 @@
 -- =======================================================
--- SKEMA DATABASE POSTGRESQL (NEON / SUPABASE / CLOUD SQL)
--- APLIKASI: CATATAN KEUANGAN (PERSONAL FINANCE PWA)
+-- SKEMA DATABASE POSTGRESQL (NEON)
+-- APLIKASI: CATATAN KEUANGAN (WEB, FULL ONLINE)
 -- =======================================================
+-- Catatan: tabel-tabel ini juga dibuat otomatis oleh aplikasi
+-- (lihat api/_lib/db.ts -> ensureTablesExist) saat pertama kali
+-- diakses. File ini disediakan sebagai referensi / untuk setup
+-- manual di Neon Console bila diperlukan.
 
 -- 1. Ekstensi UUID (Opsional jika ingin generate uuid otomatis)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. Tabel Users (Menyimpan data otentikasi akun Google & profil)
+-- 2. Tabel Users (otentikasi email/password & profil)
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(128) PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
     image_url TEXT,
+    auth_provider VARCHAR(50) DEFAULT 'password',
+    password_hash TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
