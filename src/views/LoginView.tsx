@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -13,12 +13,18 @@ import {
   UserPlus,
   LogIn,
   X,
+  Database,
+  HelpCircle,
+  ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { User as UserType } from '../types';
 import { saveSession } from '../services/auth';
 import {
+  checkDatabaseHealth,
+  DatabaseStatus,
   loginEmailUser,
-  loginOrRegisterGoogleUser,
   registerEmailUser,
 } from '../services/storage';
 
@@ -41,15 +47,27 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
 
-  // Google Modal state
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState('');
-  const [googleName, setGoogleName] = useState('');
+  // Database status and Setup Guide Modal
+  const [dbStatus, setDbStatus] = useState<DatabaseStatus>({ status: 'loading' });
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
   // Status & Feedback state
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkDatabaseHealth().then((status) => {
+      setDbStatus(status);
+    });
+  }, []);
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(label);
+    setTimeout(() => setCopiedText(null), 2000);
+  };
 
   const clearFeedback = () => {
     setErrorMessage(null);
@@ -74,7 +92,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     clearFeedback();
 
     if (!loginEmail.trim() || !loginPassword) {
-      setErrorMessage('Mohon isi email dan kata sandi Anda.');
+      setErrorMessage('Mohon isi alamat email dan kata sandi Anda.');
       return;
     }
 
@@ -82,22 +100,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     try {
       const result = await loginEmailUser(loginEmail, loginPassword);
       if (!result.success || !result.user) {
-        setErrorMessage(result.error || 'Gagal masuk. Silakan periksa kembali akun Anda.');
+        setErrorMessage(result.error || 'Email atau kata sandi tidak cocok.');
         setIsLoading(false);
         return;
       }
 
-      setSuccessMessage('Berhasil masuk! Menyiapkan data keuangan Anda...');
+      setSuccessMessage('Berhasil masuk! Menyiapkan catatan keuangan Anda...');
       setTimeout(() => {
         completeLogin(result.user!);
       }, 500);
     } catch (err) {
-      setErrorMessage('Terjadi kesalahan saat memproses login.');
+      setErrorMessage('Terjadi kendala saat menghubungkan ke database.');
       setIsLoading(false);
     }
   };
 
-  // 2. Submit Email Registration
+  // 2. Submit Email Register
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearFeedback();
@@ -128,40 +146,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         return;
       }
 
-      setSuccessMessage('Pendaftaran berhasil! Akun Anda telah disimpan ke database.');
+      setSuccessMessage('Pendaftaran berhasil! Akun Anda telah disimpan langsung ke database Neon.');
       setTimeout(() => {
         completeLogin(result.user!);
       }, 700);
     } catch (err) {
-      setErrorMessage('Terjadi kendala saat menyimpan pendaftaran.');
+      setErrorMessage('Terjadi kendala saat menyimpan pendaftaran ke database.');
       setIsLoading(false);
     }
-  };
-
-  // 3. Submit Google Sign-In / Sign-Up
-  const handleGoogleAuthSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!googleEmail.trim()) {
-      setErrorMessage('Mohon masukkan alamat email Google Anda.');
-      return;
-    }
-
-    setIsLoading(true);
-    setShowGoogleModal(false);
-
-    setTimeout(() => {
-      const name = googleName.trim() || googleEmail.split('@')[0];
-      const result = loginOrRegisterGoogleUser({
-        email: googleEmail.trim().toLowerCase(),
-        name: name,
-        image_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=059669`,
-      });
-
-      setSuccessMessage(`Akun Google terhubung! Masuk sebagai ${result.user.name}...`);
-      setTimeout(() => {
-        completeLogin(result.user);
-      }, 500);
-    }, 600);
   };
 
   return (
@@ -172,18 +164,55 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       {/* Header & Logo */}
       <header className="pt-4 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-linear-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-lg shadow-emerald-500/20">
-            <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
-              <span className="font-black text-emerald-400 text-base">CK</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-linear-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-lg shadow-emerald-500/20">
+              <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
+                <span className="font-black text-emerald-400 text-base">CK</span>
+              </div>
+            </div>
+            <div>
+              <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
+                CATATAN KEUANGAN
+              </h1>
+              <p className="text-[11px] text-slate-400 font-medium">Pure Neon PostgreSQL Database</p>
             </div>
           </div>
-          <div>
-            <h1 className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
-              CATATAN KEUANGAN
-            </h1>
-            <p className="text-[11px] text-slate-400 font-medium">Personal Finance PWA</p>
+
+          <button
+            type="button"
+            onClick={() => setShowGuideModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-300 hover:text-emerald-400 hover:border-emerald-500/40 text-[11px] font-semibold transition cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Info Neon DB</span>
+          </button>
+        </div>
+
+        {/* Database Connection Live Status Bar */}
+        <div className="mt-3 p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between text-[11px]">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                dbStatus.status === 'connected'
+                  ? 'bg-emerald-400 animate-pulse ring-2 ring-emerald-500/30'
+                  : 'bg-rose-400 ring-2 ring-rose-500/30'
+              }`}
+            />
+            <span className="text-slate-200 font-medium">
+              {dbStatus.status === 'connected'
+                ? 'Database Neon: Terhubung (Online Live)'
+                : 'Database Neon: DATABASE_URL Belum Diset'}
+            </span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowGuideModal(true)}
+            className="text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2 text-[10px] cursor-pointer"
+          >
+            Panduan
+          </button>
         </div>
       </header>
 
@@ -192,21 +221,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold mb-2">
             <Sparkles className="w-3 h-3" />
-            <span>Database User Aktif & Terisolasi</span>
+            <span>Pure Online Neon PostgreSQL</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
             {activeTab === 'login' ? (
               <>
                 Selamat Datang Kembali <br />
                 <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-teal-300">
-                  Akses Catatan Finansial Anda
+                  Masuk ke Akun Anda
                 </span>
               </>
             ) : (
               <>
-                Buat Akun Baru <br />
+                Daftar Akun Baru <br />
                 <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-teal-300">
-                  Mulai Rencanakan Keuangan
+                  Tersimpan di Database Neon
                 </span>
               </>
             )}
@@ -219,7 +248,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             id="tab-login"
             type="button"
             onClick={() => handleTabChange('login')}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition ${
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeTab === 'login'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
                 : 'text-slate-400 hover:text-slate-200'
@@ -232,7 +261,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             id="tab-register"
             type="button"
             onClick={() => handleTabChange('register')}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition ${
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeTab === 'register'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
                 : 'text-slate-400 hover:text-slate-200'
@@ -258,54 +287,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {/* Google Authentication Button */}
-        <button
-          id="btn-google-auth"
-          type="button"
-          onClick={() => {
-            clearFeedback();
-            setShowGoogleModal(true);
-          }}
-          disabled={isLoading}
-          className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs sm:text-sm transition shadow-lg shadow-black/20 active:scale-98 disabled:opacity-70 cursor-pointer"
-        >
-          {/* Official Google 4-Color Vector Icon */}
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-            <path
-              fill="#EA4335"
-              d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.1 8.8 5 12 5z"
-            />
-            <path
-              fill="#4285F4"
-              d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.4 0-.8.1-1.7.4-2.4L1.6 7c-.8 1.6-1.3 3.4-1.3 5.3 0 2 .5 3.8 1.3 5.4l3.7-3z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.2 0-5.8-2.1-6.7-5.3L1.6 16C3.5 19.8 7.4 23 12 23z"
-            />
-          </svg>
-          <span>
-            {activeTab === 'login'
-              ? 'Masuk dengan Akun Google'
-              : 'Daftar dengan Akun Google'}
-          </span>
-        </button>
-
-        {/* Divider */}
-        <div className="relative flex items-center justify-center my-2">
-          <div className="border-t border-slate-800 w-full" />
-          <span className="bg-slate-900 px-3 text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
-            atau dengan email
-          </span>
-        </div>
-
         {/* TAB 1: FORM MASUK (LOGIN) */}
         {activeTab === 'login' ? (
-          <form onSubmit={handleLoginSubmit} className="space-y-3">
+          <form onSubmit={handleLoginSubmit} className="space-y-3.5">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Alamat Email
@@ -357,21 +341,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               id="btn-submit-login"
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-900/40 active:scale-98 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer mt-1"
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-900/40 active:scale-98 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
               <LogIn className="w-4 h-4" />
-              <span>{isLoading ? 'Memverifikasi Akun...' : 'Masuk ke Akun'}</span>
+              <span>{isLoading ? 'Menghubungkan ke Neon...' : 'Masuk ke Akun'}</span>
             </button>
 
-            <div className="pt-1 text-center">
+            <div className="pt-2 text-center">
               <button
                 type="button"
                 onClick={() => handleTabChange('register')}
-                className="text-xs text-slate-400 hover:text-emerald-400 transition"
+                className="text-xs text-slate-400 hover:text-emerald-400 transition cursor-pointer"
               >
                 Belum memiliki akun?{' '}
                 <span className="text-emerald-400 font-semibold underline underline-offset-2">
-                  Daftar di sini
+                  Daftar akun baru
                 </span>
               </button>
             </div>
@@ -468,17 +452,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               id="btn-submit-register"
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-900/40 active:scale-98 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer mt-1"
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-900/40 active:scale-98 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
               <UserPlus className="w-4 h-4" />
-              <span>{isLoading ? 'Mendaftarkan Akun...' : 'Daftar Akun Baru'}</span>
+              <span>{isLoading ? 'Mendaftarkan ke Database...' : 'Daftar Akun Baru'}</span>
             </button>
 
-            <div className="pt-1 text-center">
+            <div className="pt-2 text-center">
               <button
                 type="button"
                 onClick={() => handleTabChange('login')}
-                className="text-xs text-slate-400 hover:text-emerald-400 transition"
+                className="text-xs text-slate-400 hover:text-emerald-400 transition cursor-pointer"
               >
                 Sudah punya akun terdaftar?{' '}
                 <span className="text-emerald-400 font-semibold underline underline-offset-2">
@@ -492,7 +476,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         {/* Security & System Info Note */}
         <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center gap-2.5 text-[11px] text-slate-400">
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Setiap user terisolasi dengan data transaksi & kategori mandiri.</span>
+          <span>Data tersimpan langsung di tabel database Neon PostgreSQL.</span>
         </div>
       </main>
 
@@ -504,94 +488,102 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         </p>
       </footer>
 
-      {/* Google Sign-In & Authentication Modal */}
-      {showGoogleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-sm rounded-3xl bg-white text-slate-900 p-6 shadow-2xl animate-in zoom-in-95 relative">
+      {/* Guide Modal: Setup Neon Database */}
+      {showGuideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-700 text-slate-100 p-6 shadow-2xl animate-in zoom-in-95 relative my-8">
             <button
-              onClick={() => setShowGoogleModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              onClick={() => setShowGuideModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
-            {/* Google Logo Header */}
-            <div className="text-center pb-4 border-b border-slate-100">
-              <svg className="w-7 h-7 mx-auto mb-2" viewBox="0 0 24 24">
-                <path
-                  fill="#EA4335"
-                  d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.1 8.8 5 12 5z"
-                />
-                <path
-                  fill="#4285F4"
-                  d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.4 0-.8.1-1.7.4-2.4L1.6 7c-.8 1.6-1.3 3.4-1.3 5.3 0 2 .5 3.8 1.3 5.4l3.7-3z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.2 0-5.8-2.1-6.7-5.3L1.6 16C3.5 19.8 7.4 23 12 23z"
-                />
-              </svg>
-              <h3 className="font-bold text-base text-slate-800">
-                {activeTab === 'login' ? 'Masuk dengan Google' : 'Daftar dengan Google'}
-              </h3>
-              <p className="text-xs text-slate-500">
-                Akses langsung ke database Catatan Keuangan
-              </p>
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
+              <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-sm sm:text-base text-white">
+                  Koneksi Database Neon PostgreSQL
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Langkah mengaktifkan live database cloud online
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleGoogleAuthSubmit} className="py-4 space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Email Akun Google Anda
-                </label>
-                <input
-                  type="email"
-                  required
-                  autoFocus
-                  placeholder="contoh: pulungbagas036@gmail.com"
-                  value={googleEmail}
-                  onChange={(e) => setGoogleEmail(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Masukkan email akun Google asli Anda.
+            <div className="py-4 space-y-4 text-xs text-slate-300 max-h-[60vh] overflow-y-auto pr-1">
+              {/* Langkah 1: Neon Database */}
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-[10px] font-black">
+                      1
+                    </span>
+                    Salin Connection String dari Neon
+                  </span>
+                  <a
+                    href="https://console.neon.tech"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-slate-400 hover:text-emerald-400 flex items-center gap-1"
+                  >
+                    <span>Buka Neon</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Agar setiap pendaftaran akun dan input transaksi langsung tercatat di Neon:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-400 pl-1">
+                  <li>Buka dashboard project Anda di <strong className="text-white">neon.tech</strong>.</li>
+                  <li>Di halaman Dashboard, cari bagian <strong className="text-white">Connection Details</strong>.</li>
+                  <li>Pilih opsi <strong className="text-white">Connection String</strong> (Pooled atau Direct).</li>
+                  <li>Salin URL koneksi PostgreSQL tersebut.</li>
+                </ol>
+
+                <div className="mt-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300 flex items-center justify-between gap-2">
+                  <span className="truncate">DATABASE_URL=postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy('DATABASE_URL=postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require', 'db_url')}
+                    className="shrink-0 p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                  >
+                    {copiedText === 'db_url' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-emerald-400/90 font-medium">
+                  Tabel <code className="bg-slate-900 px-1 py-0.5 rounded">users</code>, <code className="bg-slate-900 px-1 py-0.5 rounded">transactions</code>, <code className="bg-slate-900 px-1 py-0.5 rounded">categories</code>, dan <code className="bg-slate-900 px-1 py-0.5 rounded">reminders</code> akan otomatis dibuat oleh server saat terhubung!
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nama Tampilan Akun (Opsional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nama Akun Google Anda"
-                  value={googleName}
-                  onChange={(e) => setGoogleName(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
+              {/* Langkah 2: Memasang di AI Studio / Vercel */}
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-2">
+                <span className="font-bold text-teal-400 text-xs flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-300 flex items-center justify-center text-[10px] font-black">
+                    2
+                  </span>
+                  Pasang DATABASE_URL di Environment / Secrets
+                </span>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <strong>Di Google AI Studio Build:</strong> Buka menu <strong>Settings</strong> di panel atas &rarr; pilih <strong>Secrets / Environment Variables</strong> &rarr; Tambahkan variabel <code className="text-white font-mono bg-slate-900 px-1 rounded">DATABASE_URL</code> dengan value connection string Neon Anda.
+                </p>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <strong>Di Hosting Lain (Vercel / Cloud Run):</strong> Masuk ke <strong>Environment Variables</strong> &rarr; Masukkan key <code className="text-white font-mono bg-slate-900 px-1 rounded">DATABASE_URL</code>.
+                </p>
               </div>
+            </div>
 
-              <div className="pt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-xs font-semibold text-slate-600 hover:bg-slate-200"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700 flex items-center justify-center gap-1.5"
-                >
-                  <span>Lanjutkan</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </form>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(false)}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer"
+              >
+                Saya Mengerti, Tutup Panduan
+              </button>
+            </div>
           </div>
         </div>
       )}

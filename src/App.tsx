@@ -16,11 +16,12 @@ import {
   getReminders,
   getTransactions,
   initializeUserDatabase,
+  syncUserDataWithServer,
   toggleReminderStatus,
 } from './services/storage';
 import { TopBar } from './components/navigation/TopBar';
 import { BottomNav } from './components/navigation/BottomNav';
-import { OfflineIndicator } from './components/pwa/OfflineIndicator';
+import { OnlineDatabaseStatusBanner } from './components/common/OnlineDatabaseStatusBanner';
 import { TransactionDetailModal } from './components/modals/TransactionDetailModal';
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
@@ -47,6 +48,15 @@ export default function App() {
     setTransactions(txs);
     setCategories(cats);
     setReminders(rems);
+
+    // Sync in background from Neon PostgreSQL if server is connected
+    syncUserDataWithServer(session.user.id).then((res) => {
+      if (res.synced) {
+        setTransactions(getTransactions(session.user.id));
+        setCategories(getCategories(session.user.id));
+        setReminders(getReminders(session.user.id));
+      }
+    });
   }, [session?.user]);
 
   useEffect(() => {
@@ -148,7 +158,7 @@ export default function App() {
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-900">
-        <OfflineIndicator />
+        <OnlineDatabaseStatusBanner />
         <LoginView onLoginSuccess={handleLoginSuccess} />
       </div>
     );
@@ -163,8 +173,8 @@ export default function App() {
     <div className="min-h-screen bg-slate-900 text-slate-800 flex justify-center selection:bg-emerald-500 selection:text-white">
       {/* Mobile-First Shell Container */}
       <div className="w-full max-w-md bg-slate-50 min-h-screen flex flex-col shadow-2xl relative">
-        {/* Offline Connectivity Toast */}
-        <OfflineIndicator />
+        {/* Online Database Status Banner */}
+        <OnlineDatabaseStatusBanner />
 
         {/* Top Bar with User Info & JWT Session Status */}
         <TopBar

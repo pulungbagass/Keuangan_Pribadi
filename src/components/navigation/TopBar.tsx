@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Clock, ShieldCheck, RefreshCw, Smartphone } from 'lucide-react';
+import { LogOut, Clock, ShieldCheck, RefreshCw, Database } from 'lucide-react';
 import { AuthSession } from '../../types';
 import { extendSession } from '../../services/auth';
-import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface TopBarProps {
   session: AuthSession;
@@ -93,10 +92,16 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
           </button>
 
-          {/* Right Action Tools: Session & PWA */}
+          {/* Right Action Tools: Session & Database */}
           <div className="flex items-center gap-2">
-            {/* PWA Install Button */}
-            <PWAInstallButton compact={true} />
+            {/* Neon DB Online status */}
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-100"
+              title="Terhubung ke Database Neon PostgreSQL"
+            >
+              <Database className="w-3 h-3 text-emerald-600" />
+              <span>Neon Online</span>
+            </div>
 
             {/* Session Countdown Badge */}
             <button

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User as UserIcon,
   ShieldCheck,
@@ -6,15 +6,21 @@ import {
   Database,
   RefreshCw,
   LogOut,
-  Smartphone,
   CheckCircle2,
   FileSpreadsheet,
   AlertTriangle,
+  Server,
 } from 'lucide-react';
 import { AuthSession, Category, Reminder, Transaction, User } from '../types';
 import { extendSession } from '../services/auth';
-import { PWAInstallButton } from '../components/pwa/PWAInstallButton';
-import { exportTransactionsToCSV, initializeUserDatabase } from '../services/storage';
+import {
+  checkDatabaseHealth,
+  DatabaseStatus,
+  exportTransactionsToCSV,
+  initializeUserDatabase,
+  resetUserDataOnServer,
+  syncUserDataWithServer,
+} from '../services/storage';
 
 interface ProfileViewProps {
   session: AuthSession;
@@ -37,6 +43,32 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 }) => {
   const [extendedMsg, setExtendedMsg] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [dbStatus, setDbStatus] = useState<DatabaseStatus>({ status: 'loading' });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkDatabaseHealth().then(setDbStatus);
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncSuccessMsg(null);
+    try {
+      const res = await syncUserDataWithServer(session.user.id);
+      onReloadData();
+      if (res.synced) {
+        setSyncSuccessMsg('Data berhasil disingkronkan dengan server Neon PostgreSQL!');
+      } else {
+        setSyncSuccessMsg('Singkronisasi selesai (mode lokal aktif).');
+      }
+    } catch (e) {
+      setSyncSuccessMsg('Gagal melakukan singkronisasi.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncSuccessMsg(null), 3500);
+    }
+  };
 
   const handleExtendSession = () => {
     const updated = extendSession(120);
@@ -47,9 +79,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
-  const handleResetData = () => {
-    // Clear transactions & reminders for user (100% clean state)
+  const handleResetData = async () => {
+    // Clear transactions & reminders for user
     try {
+      await resetUserDataOnServer(session.user.id);
       localStorage.removeItem('ck_db_transactions');
       localStorage.removeItem('ck_db_reminders');
       initializeUserDatabase(session.user);
@@ -74,7 +107,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           Akun & Keamanan
         </h2>
         <p className="text-xs text-slate-400">
-          Status sesi JWT dan penyimpanan lokal PWA
+          Status sesi JWT dan sinkronisasi database Neon PostgreSQL
         </p>
       </div>
 
@@ -99,7 +132,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <p className="text-xs text-slate-500 truncate mt-0.5">{session.user.email}</p>
           <div className="mt-1 flex items-center gap-1.5">
             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-              Akun Google Terhubung
+              Database Neon PostgreSQL
             </span>
           </div>
         </div>
@@ -143,6 +176,50 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </button>
       </div>
 
+      {/* Neon PostgreSQL Live Database Card */}
+      <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-bold text-slate-800">Database Neon PostgreSQL</h3>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                dbStatus.status === 'connected'
+                  ? 'bg-emerald-500 animate-pulse'
+                  : 'bg-amber-500'
+              }`}
+            />
+            <span className="text-[11px] font-semibold text-slate-600">
+              {dbStatus.status === 'connected' ? 'Aktif & Terhubung' : 'Mode Offline'}
+            </span>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          {dbStatus.status === 'connected'
+            ? 'Setiap transaksi baru dan login otomatis tersimpan di tabel cloud database Neon PostgreSQL.'
+            : 'Server saat ini menyimpan ke storage lokal perangkat. Pasang DATABASE_URL di secrets untuk mengaktifkan live database Neon.'}
+        </p>
+
+        {syncSuccessMsg && (
+          <p className="text-xs text-emerald-700 font-bold bg-emerald-50 p-2 rounded-xl border border-emerald-100 animate-in fade-in flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>{syncSuccessMsg}</span>
+          </p>
+        )}
+
+        <button
+          onClick={handleManualSync}
+          disabled={isSyncing}
+          className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition disabled:opacity-60"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} />
+          <span>{isSyncing ? 'Menyinkronkan ke Neon...' : 'Singkronkan Data Sekarang'}</span>
+        </button>
+      </div>
+
       {/* Database Statistics */}
       <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-3">
         <div className="flex items-center gap-2">
@@ -178,20 +255,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
           <span>Cadangkan Data ke CSV / Excel</span>
         </button>
-      </div>
-
-      {/* PWA Section */}
-      <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-2.5">
-        <div className="flex items-center gap-2">
-          <Smartphone className="w-4 h-4 text-emerald-600" />
-          <h3 className="text-xs font-bold text-slate-800">Progressive Web App (PWA)</h3>
-        </div>
-        <p className="text-[11px] text-slate-500 leading-relaxed">
-          Aplikasi ini dirancang mobile-first dan dapat dipasang di layar utama ponsel Anda tanpa address bar browser.
-        </p>
-        <div className="pt-1">
-          <PWAInstallButton />
-        </div>
       </div>
 
       {/* Reset & Logout */}

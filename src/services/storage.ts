@@ -113,6 +113,55 @@ export function initializeUserDatabase(user: User): void {
   // 3. Transactions & Reminders are clean/empty by default (No dummy data)
 }
 
+// ---------------- SERVER & DATABASE STATUS ----------------
+export interface DatabaseStatus {
+  status: 'connected' | 'disconnected' | 'error' | 'loading';
+  message?: string;
+}
+
+export async function checkDatabaseHealth(): Promise<DatabaseStatus> {
+  try {
+    const res = await fetch('/api/health');
+    if (!res.ok) {
+      return { status: 'disconnected', message: 'API server tidak merespons.' };
+    }
+    const data = await res.json();
+    return {
+      status: data.database === 'connected' ? 'connected' : 'disconnected',
+      message: data.message,
+    };
+  } catch (err) {
+    return { status: 'disconnected', message: 'Tidak dapat terhubung ke server backend.' };
+  }
+}
+
+export async function syncUserDataWithServer(userId: string): Promise<{ synced: boolean }> {
+  try {
+    const res = await fetch(`/api/user-data?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) return { synced: false };
+    const data = await res.json();
+
+    if (data.synced) {
+      if (Array.isArray(data.transactions)) {
+        saveToStorage(STORAGE_TRANSACTIONS_KEY, data.transactions);
+      }
+      if (Array.isArray(data.categories) && data.categories.length > 0) {
+        // Merge categories
+        const existing = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
+        const otherUsersCats = existing.filter(c => c.user_id !== userId);
+        saveToStorage(STORAGE_CATEGORIES_KEY, [...otherUsersCats, ...data.categories]);
+      }
+      if (Array.isArray(data.reminders)) {
+        saveToStorage(STORAGE_REMINDERS_KEY, data.reminders);
+      }
+      return { synced: true };
+    }
+  } catch (e) {
+    console.warn('Sync with server skipped (offline mode):', e);
+  }
+  return { synced: false };
+}
+
 // ---------------- USER DATABASE OPERATIONS ----------------
 export function getAllRegisteredUsers(): User[] {
   const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
@@ -143,35 +192,28 @@ export async function registerEmailUser(
     return { success: false, error: 'Kata sandi minimal 6 karakter.' };
   }
 
-  const existing = findUserByEmail(cleanEmail);
-  if (existing) {
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: cleanName, email: cleanEmail, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Gagal mendaftar ke database Neon.' };
+    }
+    if (data.user) {
+      initializeUserDatabase(data.user);
+      return { success: true, user: data.user };
+    }
+  } catch (e) {
     return {
       success: false,
-      error: 'Email ini sudah terdaftar. Silakan masuk melalui tab Masuk.',
+      error: 'Koneksi ke database Neon gagal. Pastikan perangkat online dan DATABASE_URL telah diset.',
     };
   }
 
-  const passHash = await hashPassword(password);
-  const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const newUser: StoredUserAccount = {
-    id: userId,
-    email: cleanEmail,
-    name: cleanName,
-    image_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}&backgroundColor=059669`,
-    auth_provider: 'password',
-    created_at: new Date().toISOString(),
-    password_hash: passHash,
-  };
-
-  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
-  users.push(newUser);
-  saveToStorage(STORAGE_USERS_KEY, users);
-
-  // Initialize categories for new user
-  initializeUserDatabase(newUser);
-
-  const { password_hash: _pass, ...cleanUser } = newUser;
-  return { success: true, user: cleanUser };
+  return { success: false, error: 'Gagal membuat akun di database Neon.' };
 }
 
 export async function loginEmailUser(
@@ -179,83 +221,44 @@ export async function loginEmailUser(
   password: string
 ): Promise<{ success: boolean; user?: User; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  const user = findUserByEmail(cleanEmail);
 
-  if (!user) {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Gagal masuk ke database Neon.' };
+    }
+    if (data.user) {
+      initializeUserDatabase(data.user);
+      await syncUserDataWithServer(data.user.id);
+      return { success: true, user: data.user };
+    }
+  } catch (e) {
     return {
       success: false,
-      error: 'Akun dengan email ini belum terdaftar. Silakan buka tab Daftar untuk membuat akun baru.',
+      error: 'Koneksi ke database Neon gagal. Pastikan perangkat online dan DATABASE_URL telah diset.',
     };
   }
 
-  if (user.auth_provider === 'google' && !user.password_hash) {
-    return {
-      success: false,
-      error: 'Akun ini terdaftar dengan Akun Google. Silakan masuk menggunakan tombol Akun Google.',
-    };
-  }
-
-  const incomingHash = await hashPassword(password);
-  if (user.password_hash && user.password_hash !== incomingHash) {
-    return {
-      success: false,
-      error: 'Kata sandi salah. Mohon periksa kembali kata sandi Anda.',
-    };
-  }
-
-  initializeUserDatabase(user);
-
-  const { password_hash: _pass, ...cleanUser } = user;
-  return { success: true, user: cleanUser };
+  return { success: false, error: 'Gagal masuk akun.' };
 }
 
-export function loginOrRegisterGoogleUser(googleData: {
-  email: string;
-  name: string;
-  image_url?: string;
-  googleSub?: string;
-}): { success: boolean; user: User } {
-  const cleanEmail = googleData.email.trim().toLowerCase();
-  const users = getFromStorage<StoredUserAccount[]>(STORAGE_USERS_KEY, []);
-  let user = users.find(u => u.email.toLowerCase() === cleanEmail);
-
-  if (!user) {
-    const userId = googleData.googleSub
-      ? `usr_google_${googleData.googleSub}`
-      : `usr_google_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-    user = {
-      id: userId,
-      email: cleanEmail,
-      name: googleData.name.trim() || cleanEmail.split('@')[0],
-      image_url:
-        googleData.image_url ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(googleData.name || cleanEmail)}&backgroundColor=059669`,
-      auth_provider: 'google',
-      created_at: new Date().toISOString(),
-    };
-
-    users.push(user);
-    saveToStorage(STORAGE_USERS_KEY, users);
-  } else {
-    let updated = false;
-    if (googleData.name && user.name !== googleData.name) {
-      user.name = googleData.name;
-      updated = true;
-    }
-    if (googleData.image_url && user.image_url !== googleData.image_url) {
-      user.image_url = googleData.image_url;
-      updated = true;
-    }
-    if (updated) {
-      saveToStorage(STORAGE_USERS_KEY, users);
-    }
+export async function resetUserDataOnServer(userId: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/data/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('Reset data server error:', e);
+    return false;
   }
-
-  initializeUserDatabase(user);
-
-  const { password_hash: _pass, ...cleanUser } = user;
-  return { success: true, user: cleanUser };
 }
 
 // ---------------- CATEGORY OPERATIONS ----------------
@@ -273,6 +276,14 @@ export function addCategory(userId: string, data: Omit<Category, 'id' | 'user_id
   };
   all.push(newCat);
   saveToStorage(STORAGE_CATEGORIES_KEY, all);
+
+  // Sync to Neon
+  fetch('/api/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newCat),
+  }).catch((err) => console.warn('Neon addCategory sync warning:', err));
+
   return newCat;
 }
 
@@ -280,6 +291,12 @@ export function deleteCategory(userId: string, categoryId: string): boolean {
   const all = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
   const filtered = all.filter(c => !(c.id === categoryId && c.user_id === userId));
   saveToStorage(STORAGE_CATEGORIES_KEY, filtered);
+
+  // Sync to Neon
+  fetch(`/api/categories/${encodeURIComponent(categoryId)}?userId=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  }).catch((err) => console.warn('Neon deleteCategory sync warning:', err));
+
   return true;
 }
 
@@ -304,6 +321,14 @@ export function addTransaction(
   };
   all.unshift(newTx);
   saveToStorage(STORAGE_TRANSACTIONS_KEY, all);
+
+  // Sync to Neon
+  fetch('/api/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newTx),
+  }).catch((err) => console.warn('Neon addTransaction sync warning:', err));
+
   return newTx;
 }
 
@@ -326,6 +351,14 @@ export function updateTransaction(
   };
 
   saveToStorage(STORAGE_TRANSACTIONS_KEY, all);
+
+  // Sync update to Neon
+  fetch('/api/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(all[idx]),
+  }).catch((err) => console.warn('Neon updateTransaction sync warning:', err));
+
   return all[idx];
 }
 
@@ -333,6 +366,12 @@ export function deleteTransaction(userId: string, id: string): boolean {
   const all = getFromStorage<Transaction[]>(STORAGE_TRANSACTIONS_KEY, []);
   const filtered = all.filter(t => !(t.id === id && t.user_id === userId));
   saveToStorage(STORAGE_TRANSACTIONS_KEY, filtered);
+
+  // Sync to Neon
+  fetch(`/api/transactions/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  }).catch((err) => console.warn('Neon deleteTransaction sync warning:', err));
+
   return true;
 }
 
@@ -357,6 +396,14 @@ export function addReminder(
   };
   all.push(newReminder);
   saveToStorage(STORAGE_REMINDERS_KEY, all);
+
+  // Sync to Neon
+  fetch('/api/reminders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newReminder),
+  }).catch((err) => console.warn('Neon addReminder sync warning:', err));
+
   return newReminder;
 }
 
@@ -367,6 +414,14 @@ export function toggleReminderStatus(userId: string, id: string): Reminder | nul
 
   item.status = item.status === 'pending' ? 'paid' : 'pending';
   saveToStorage(STORAGE_REMINDERS_KEY, all);
+
+  // Sync to Neon
+  fetch(`/api/reminders/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: item.status, user_id: userId }),
+  }).catch((err) => console.warn('Neon toggleReminder sync warning:', err));
+
   return item;
 }
 
@@ -374,6 +429,12 @@ export function deleteReminder(userId: string, id: string): boolean {
   const all = getFromStorage<Reminder[]>(STORAGE_REMINDERS_KEY, []);
   const filtered = all.filter(r => !(r.id === id && r.user_id === userId));
   saveToStorage(STORAGE_REMINDERS_KEY, filtered);
+
+  // Sync to Neon
+  fetch(`/api/reminders/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  }).catch((err) => console.warn('Neon deleteReminder sync warning:', err));
+
   return true;
 }
 

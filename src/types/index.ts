@@ -5,7 +5,7 @@ export interface User {
   email: string;
   name: string;
   image_url: string;
-  auth_provider?: 'google' | 'password';
+  auth_provider?: 'password';
   created_at?: string;
 }
 
