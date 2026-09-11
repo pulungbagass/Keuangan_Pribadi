@@ -99,14 +99,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   };
 
   return (
-    <div className="pb-28 pt-3 px-4 max-w-md mx-auto space-y-4">
+    <div className="app-page-wide space-y-4">
       {/* Header & Export Button */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-black text-slate-800 tracking-tight">
+          <h2 className="section-title">
             Riwayat Transaksi
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="section-subtitle">
             Histori pencatatan lengkap presisi hingga ke detik
           </p>
         </div>
@@ -116,7 +116,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           id="btn-export-csv"
           onClick={handleExportCSV}
           disabled={filteredTransactions.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs active:scale-95 disabled:opacity-50"
+          className="btn-dark px-3 py-1.5 text-xs shadow-xs disabled:opacity-50"
           title="Unduh seluruh riwayat sebagai file CSV / Excel"
         >
           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
@@ -277,7 +277,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 </div>
 
                 {/* Day Items Card */}
-                <div className="rounded-3xl bg-white border border-slate-200/80 p-2 shadow-xs space-y-1">
+                <div className="card p-2 space-y-1">
                   {items.map(tx => {
                     const cat = categoryMap.get(tx.category_id);
                     const isIncome = tx.type === 'income';

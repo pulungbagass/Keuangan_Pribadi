@@ -44,14 +44,14 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
   const paidCount = reminders.filter(r => r.status === 'paid').length;
 
   return (
-    <div className="pb-28 pt-3 px-4 max-w-md mx-auto space-y-4">
+    <div className="app-page space-y-4">
       {/* Header & Add Button */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-black text-slate-800 tracking-tight">
+          <h2 className="section-title">
             Pengingat Tagihan
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="section-subtitle">
             Kelola agenda pembayaran rutin tepat waktu
           </p>
         </div>
@@ -59,7 +59,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
         <button
           id="btn-add-reminder-modal"
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs active:scale-95"
+          className="btn-primary px-3 py-1.5 text-xs"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Pengingat Baru</span>
@@ -67,7 +67,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-3 gap-1 bg-white p-1 rounded-2xl border border-slate-200/80 shadow-xs">
+      <div className="grid grid-cols-3 gap-1 card p-1">
         <button
           onClick={() => setFilterTab('pending')}
           className={`py-1.5 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 ${
@@ -125,8 +125,8 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
             return (
               <div
                 key={rem.id}
-                className={`p-3.5 rounded-2xl border transition bg-white shadow-xs space-y-2.5 ${
-                  isPaid ? 'border-slate-200/60 opacity-80' : 'border-slate-200/90'
+                className={`card p-3.5 space-y-2.5 transition ${
+                  isPaid ? 'opacity-70' : ''
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -200,7 +200,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
                 {!isPaid && rem.amount && (
                   <button
                     onClick={() => onQuickPayAsTransaction(rem)}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition"
+                    className="btn-secondary w-full py-1.5 text-[11px]"
                   >
                     <Sparkles className="w-3 h-3 text-amber-600" />
                     <span>Bayar & Catat sebagai Pengeluaran</span>

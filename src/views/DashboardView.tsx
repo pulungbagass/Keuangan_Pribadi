@@ -125,7 +125,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [reminders]);
 
   return (
-    <div className="pb-24 pt-3 px-4 max-w-md mx-auto space-y-4">
+    <div className="app-page-wide space-y-4">
       {/* 1. Filter Time Tabs */}
       <div className="flex items-center justify-between bg-white p-1 rounded-2xl border border-slate-200/80 shadow-xs">
         {(['daily', 'weekly', 'monthly', 'all'] as TimeFilterMode[]).map(mode => {
@@ -257,8 +257,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {/* 4. Category Expense Breakdown */}
-      <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-3">
+      {/* 4 & 5. Category Breakdown + Recent Transactions — stacked on mobile, side-by-side on desktop */}
+      <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
+      <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <PieChart className="w-4 h-4 text-emerald-600" />
@@ -311,7 +312,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 5. Recent Transactions List */}
-      <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-3">
+      <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-slate-800">Transaksi Terkini</h3>
           <button
@@ -372,7 +373,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {isIncome ? '+' : '-'} {formatRupiah(tx.amount)}
                     </p>
                     {tx.details.location && (
-                      <p className="text-[9px] text-slate-400 truncate max-w-[90px]">
+                      <p className="text-[10px] text-slate-400 truncate max-w-[90px]">
                         {tx.details.location}
                       </p>
                     )}
@@ -382,6 +383,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             })}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

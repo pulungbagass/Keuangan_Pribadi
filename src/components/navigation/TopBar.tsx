@@ -60,8 +60,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-2.5 transition-all">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-2.5 transition-all">
+        <div className="max-w-md md:max-w-5xl mx-auto flex items-center justify-between gap-3">
           {/* User profile avatar & greeting */}
           <button
             id="btn-topbar-profile"

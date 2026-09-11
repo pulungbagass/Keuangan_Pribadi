@@ -25,8 +25,8 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   const details = transaction.details || {};
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in">
-      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="modal-overlay animate-in fade-in">
+      <div className="modal-panel p-5">
         {/* Header bar */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -170,7 +170,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                     onDelete(transaction.id);
                     onClose();
                   }}
-                  className="flex-1 py-2 bg-rose-600 text-white rounded-lg text-xs font-semibold hover:bg-rose-700 transition shadow-xs"
+                  className="btn-danger flex-1 py-2 text-xs"
                 >
                   Ya, Hapus
                 </button>
@@ -181,14 +181,14 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
               <button
                 id="btn-delete-tx"
                 onClick={() => setConfirmDelete(true)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition"
+                className="btn-danger-ghost px-3 py-2.5 text-xs"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Hapus</span>
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 transition"
+                className="btn-dark flex-1 py-2.5 text-xs"
               >
                 Tutup
               </button>

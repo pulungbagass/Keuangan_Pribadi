@@ -78,8 +78,8 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in">
-      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="modal-overlay animate-in fade-in">
+      <div className="modal-panel p-5">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -100,7 +100,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Type Toggle */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tipe Kategori</label>
+            <label className="field-label">Tipe Kategori</label>
             <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
               <button
                 type="button"
@@ -129,7 +129,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
 
           {/* Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nama Kategori</label>
+            <label className="field-label">Nama Kategori</label>
             <input
               type="text"
               id="input-cat-name"
@@ -139,14 +139,14 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                 if (error) setError('');
               }}
               placeholder="Contoh: Skincare, Kopi, Investasi Saham"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              className="field-input px-3.5 py-2.5"
             />
             {error && <p className="text-[11px] text-rose-500 mt-1">{error}</p>}
           </div>
 
           {/* Color picker */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Pilihan Warna Aksen</label>
+            <label className="field-label">Pilihan Warna Aksen</label>
             <div className="flex flex-wrap gap-2">
               {AVAILABLE_COLORS.map((c) => (
                 <button
@@ -167,7 +167,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
 
           {/* Icon picker */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Pilihan Ikon</label>
+            <label className="field-label">Pilihan Ikon</label>
             <div className="grid grid-cols-6 gap-2 max-h-36 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-100">
               {AVAILABLE_ICONS.map((icon) => (
                 <button
@@ -191,14 +191,14 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 transition"
+              className="btn-secondary flex-1 py-2.5 text-xs"
             >
               Batal
             </button>
             <button
               type="submit"
               id="btn-save-category"
-              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 transition"
+              className="btn-primary flex-1 py-2.5 text-xs shadow-sm shadow-emerald-600/20"
             >
               Simpan Kategori
             </button>

@@ -21,6 +21,7 @@ import {
 } from './services/storage';
 import { TopBar } from './components/navigation/TopBar';
 import { BottomNav } from './components/navigation/BottomNav';
+import { Sidebar } from './components/navigation/Sidebar';
 import { OnlineDatabaseStatusBanner } from './components/common/OnlineDatabaseStatusBanner';
 import { TransactionDetailModal } from './components/modals/TransactionDetailModal';
 import { LoginView } from './views/LoginView';
@@ -157,7 +158,7 @@ export default function App() {
   // If user is not authenticated: Show Login View (Guest is prohibited)
   if (!session) {
     return (
-      <div className="min-h-screen bg-slate-900">
+      <div className="min-h-screen bg-slate-50">
         <OnlineDatabaseStatusBanner />
         <LoginView onLoginSuccess={handleLoginSuccess} />
       </div>
@@ -170,9 +171,16 @@ export default function App() {
     : undefined;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-800 flex justify-center selection:bg-emerald-500 selection:text-white">
-      {/* Mobile-First Shell Container */}
-      <div className="w-full max-w-md bg-slate-50 min-h-screen flex flex-col shadow-2xl relative">
+    <div className="min-h-screen bg-slate-50 text-slate-800 selection:bg-emerald-500 selection:text-white md:flex">
+      {/* Desktop-only navigation rail (hidden on mobile; BottomNav takes over there) */}
+      <Sidebar
+        currentTab={currentTab}
+        onChangeTab={tab => setCurrentTab(tab)}
+        pendingRemindersCount={pendingRemindersCount}
+      />
+
+      {/* Main column: full app on mobile, content column beside the sidebar on desktop */}
+      <div className="flex-1 min-h-screen flex flex-col min-w-0">
         {/* Online Database Status Banner */}
         <OnlineDatabaseStatusBanner />
 
@@ -239,21 +247,21 @@ export default function App() {
           )}
         </main>
 
-        {/* Bottom Navigation Bar */}
+        {/* Bottom Navigation Bar (mobile only — Sidebar takes over on desktop) */}
         <BottomNav
           currentTab={currentTab}
           onChangeTab={tab => setCurrentTab(tab)}
           pendingRemindersCount={pendingRemindersCount}
         />
-
-        {/* Transaction Detail Drawer / Modal */}
-        <TransactionDetailModal
-          transaction={selectedTransaction}
-          category={selectedCat}
-          onClose={() => setSelectedTransaction(null)}
-          onDelete={handleDeleteTransaction}
-        />
       </div>
+
+      {/* Transaction Detail Drawer / Modal */}
+      <TransactionDetailModal
+        transaction={selectedTransaction}
+        category={selectedCat}
+        onClose={() => setSelectedTransaction(null)}
+        onDelete={handleDeleteTransaction}
+      />
     </div>
   );
 }

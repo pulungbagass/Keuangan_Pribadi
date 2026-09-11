@@ -158,13 +158,13 @@ export const InputView: React.FC<InputViewProps> = ({
   };
 
   return (
-    <div className="pb-28 pt-3 px-4 max-w-md mx-auto space-y-4">
+    <div className="app-page space-y-4">
       {/* Title */}
       <div>
-        <h2 className="text-base font-black text-slate-800 tracking-tight">
+        <h2 className="section-title">
           Catat Transaksi
         </h2>
-        <p className="text-xs text-slate-400">
+        <p className="section-subtitle">
           Formulir progressive dengan fleksibilitas data JSONB
         </p>
       </div>
@@ -225,7 +225,7 @@ export const InputView: React.FC<InputViewProps> = ({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Nominal Input Card */}
-        <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-3">
+        <div className="card p-4 space-y-3">
           <label className="block text-xs font-bold text-slate-700">
             Nominal Transaksi (Rp) *
           </label>
@@ -269,7 +269,7 @@ export const InputView: React.FC<InputViewProps> = ({
         </div>
 
         {/* Category Selection with Modal Trigger */}
-        <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-3">
+        <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-700">Pilih Kategori *</label>
             <button
@@ -313,7 +313,7 @@ export const InputView: React.FC<InputViewProps> = ({
         </div>
 
         {/* Date & Time Input (TIMESTAMPTZ second precision) */}
-        <div className="rounded-3xl bg-white border border-slate-200/80 p-4 shadow-xs space-y-2">
+        <div className="card p-4 space-y-2">
           <label className="block text-xs font-bold text-slate-700">
             Tanggal & Jam Transaksi (WIB)
           </label>
@@ -324,7 +324,7 @@ export const InputView: React.FC<InputViewProps> = ({
               value={dateTimeStr}
               step="1"
               onChange={e => setDateTimeStr(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="field-input px-3.5 py-2.5 font-semibold"
             />
           </div>
           <span className="text-[10px] text-slate-400 block">
@@ -333,7 +333,7 @@ export const InputView: React.FC<InputViewProps> = ({
         </div>
 
         {/* Progressive Disclosure: Details (JSONB flexible columns) */}
-        <div className="rounded-3xl bg-white border border-slate-200/80 overflow-hidden shadow-xs">
+        <div className="card overflow-hidden">
           <button
             type="button"
             id="btn-toggle-details"
@@ -387,7 +387,7 @@ export const InputView: React.FC<InputViewProps> = ({
                   placeholder="Atau ketik metode lainnya (cth: OVO Cash)"
                   value={paymentMethod}
                   onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="field-input px-3 py-2"
                 />
               </div>
 
@@ -402,7 +402,7 @@ export const InputView: React.FC<InputViewProps> = ({
                   placeholder="Contoh: Grand Indonesia, SPBU Pertamina, Starbucks"
                   value={location}
                   onChange={e => setLocation(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="field-input px-3 py-2"
                 />
               </div>
 
@@ -417,7 +417,7 @@ export const InputView: React.FC<InputViewProps> = ({
                   placeholder="Tulis rincian pembelian, nomor nota, atau rekanan makan..."
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none"
+                  className="field-input px-3 py-2 resize-none"
                 />
               </div>
 
@@ -452,7 +452,7 @@ export const InputView: React.FC<InputViewProps> = ({
                   value={customTagInput}
                   onChange={e => setCustomTagInput(e.target.value)}
                   onKeyDown={handleAddCustomTag}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="field-input px-3 py-1.5"
                 />
               </div>
             </div>
@@ -463,7 +463,7 @@ export const InputView: React.FC<InputViewProps> = ({
         <button
           type="submit"
           id="btn-submit-transaction"
-          className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-600/20 active:scale-98 transition flex items-center justify-center gap-2"
+          className="btn-primary w-full py-3.5 rounded-2xl text-xs sm:text-sm shadow-md shadow-emerald-600/20"
         >
           <CheckCircle2 className="w-4 h-4" />
           <span>Simpan Transaksi</span>

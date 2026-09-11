@@ -4,7 +4,43 @@ Aplikasi pencatatan keuangan pribadi, full online (bukan PWA), dengan
 database Neon PostgreSQL. React + Vite di frontend, Vercel Serverless
 Function (Express) di backend.
 
-## Update terbaru: fix error 500 di /api/auth/register
+## Update terbaru: perombakan konsistensi UI + layout desktop
+
+Backend/koneksi database **tidak diubah sama sekali** di update ini — murni
+perubahan tampilan. Ringkasan:
+
+1. **Satu tema di seluruh app.** Sebelumnya halaman Login memakai tema gelap
+   (slate-900) sementara semua halaman lain (Dashboard, History, Input,
+   Reminders, Profile, semua modal) memakai tema terang. Sekarang semuanya
+   terang, konsisten, dengan aksen emerald yang sama.
+2. **Sistem desain terpusat** di `src/index.css` (`.card`, `.btn-primary`,
+   `.btn-secondary`, `.btn-dark`, `.btn-danger`, `.field-input`,
+   `.field-label`, `.app-page`, `.app-page-wide`, `.modal-overlay`,
+   `.modal-panel`) — dipakai di semua view & modal supaya kartu, tombol,
+   input, dan modal tidak lagi copy-paste style yang lama-lama berbeda.
+3. **Layout desktop sungguhan.** Sebelumnya di layar lebar, app cuma tampil
+   sebagai kolom sempit (lebar HP) mengambang di tengah layar gelap kosong.
+   Sekarang:
+   - Ada `Sidebar.tsx` (navigasi khusus desktop, `md:` ke atas) menggantikan
+     BottomNav yang otomatis disembunyikan di layar lebar.
+   - Konten memakai container yang lebih lega di desktop (`.app-page-wide`
+     untuk Dashboard & History yang padat data; `.app-page` yang lebih
+     ringkas untuk halaman form seperti Input/Reminders/Profile/Login).
+   - Dashboard menampilkan 2 kartu bagian bawahnya (breakdown kategori +
+     transaksi terkini) **berdampingan** di desktop, tetap bertumpuk di
+     mobile — desktop tidak perlu identik dengan mobile, tapi tetap
+     konsisten gaya visualnya.
+   - Mobile **tidak berubah perilakunya sama sekali** — breakpoint hanya
+     aktif di `md` (768px) ke atas.
+4. Fallback warna, radius, shadow, dan skala tipografi (yang sebelumnya
+   campur `rounded-xl/2xl/3xl`, `pb-24` vs `pb-28`, dll) dirapikan mengikuti
+   hierarki yang konsisten.
+5. File-file mati sisa merge sebelumnya (`server.ts`, `server/db.ts`,
+   `metadata.json`, `bun.lock`, ikon PWA, `public/assets/aistudio/`) sudah
+   dibersihkan lagi — semuanya sudah tidak dipakai sama sekali oleh
+   `vercel.json`/`api/`, jadi aman dihapus tanpa memengaruhi koneksi.
+
+## Update sebelumnya: fix error 500 di /api/auth/register
 
 Kalau sebelumnya deploy sempat kena `500 Internal Server Error` dengan pesan
 generik "Gagal mendaftar ke database Neon.", itu bukan masalah database —
