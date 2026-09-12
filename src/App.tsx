@@ -6,6 +6,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthSession, Category, Reminder, TabRoute, Transaction } from './types';
 import { clearSession, getStoredSession } from './services/auth';
+import { useToast } from './components/common/Toast';
+import { DashboardSkeleton, HistorySkeleton, RemindersSkeleton } from './components/common/Skeletons';
 import {
   addCategory,
   addReminder,
@@ -32,12 +34,16 @@ import { RemindersView } from './views/RemindersView';
 import { ProfileView } from './views/ProfileView';
 
 export default function App() {
+  const { showSuccess, showError } = useToast();
   const [session, setSession] = useState<AuthSession | null>(() => getStoredSession());
   const [currentTab, setCurrentTab] = useState<TabRoute>('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  // True only until the very first data sync (on login/session restore) resolves,
+  // so Dashboard/History/Reminders can show a skeleton instead of an empty state.
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Load user data whenever session changes
   const reloadUserData = useCallback(() => {
@@ -51,13 +57,15 @@ export default function App() {
     setReminders(rems);
 
     // Sync in background from Neon PostgreSQL if server is connected
-    syncUserDataWithServer(session.user.id).then((res) => {
-      if (res.synced) {
-        setTransactions(getTransactions(session.user.id));
-        setCategories(getCategories(session.user.id));
-        setReminders(getReminders(session.user.id));
-      }
-    });
+    syncUserDataWithServer(session.user.id)
+      .then((res) => {
+        if (res.synced) {
+          setTransactions(getTransactions(session.user.id));
+          setCategories(getCategories(session.user.id));
+          setReminders(getReminders(session.user.id));
+        }
+      })
+      .finally(() => setIsInitialLoading(false));
   }, [session?.user]);
 
   useEffect(() => {
@@ -84,48 +92,83 @@ export default function App() {
   };
 
   // Transaction Actions
-  const handleSaveTransaction = (
+  const handleSaveTransaction = async (
     txData: Omit<Transaction, 'id' | 'user_id' | 'created_at'>
-  ) => {
-    if (!session?.user) return;
-    addTransaction(session.user.id, txData);
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await addTransaction(session.user.id, txData);
     reloadUserData();
+    // Note: InputView shows its own rich inline success banner (with a
+    // "Riwayat" shortcut) on success, so we only toast the error case here
+    // to avoid a redundant double confirmation for the same action.
+    if (!result.synced && result.error) {
+      showError(result.error);
+    }
+    return { success: result.success, error: result.synced ? undefined : result.error };
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     if (!session?.user) return;
-    deleteTransaction(session.user.id, id);
+    const result = await deleteTransaction(session.user.id, id);
     reloadUserData();
     setSelectedTransaction(null);
+    if (result.synced) {
+      showSuccess('Transaksi berhasil dihapus.');
+    } else if (result.error) {
+      showError(result.error);
+    }
   };
 
-  const handleAddCategory = (catData: Omit<Category, 'id' | 'user_id'>) => {
-    if (!session?.user) throw new Error('No user session');
-    const created = addCategory(session.user.id, catData);
+  const handleAddCategory = async (
+    catData: Omit<Category, 'id' | 'user_id'>
+  ): Promise<{ success: boolean; data?: Category; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await addCategory(session.user.id, catData);
     reloadUserData();
-    return created;
+    if (result.synced) {
+      showSuccess('Kategori baru berhasil ditambahkan!');
+    } else if (result.error) {
+      showError(result.error);
+    }
+    return { success: result.success, data: result.data, error: result.synced ? undefined : result.error };
   };
 
   // Reminder Actions
-  const handleToggleReminderStatus = (id: string) => {
+  const handleToggleReminderStatus = async (id: string) => {
     if (!session?.user) return;
-    toggleReminderStatus(session.user.id, id);
+    const result = await toggleReminderStatus(session.user.id, id);
     reloadUserData();
+    if (!result.synced && result.error) {
+      showError(result.error);
+    }
   };
 
-  const handleDeleteReminder = (id: string) => {
+  const handleDeleteReminder = async (id: string) => {
     if (!session?.user) return;
-    deleteReminder(session.user.id, id);
+    const result = await deleteReminder(session.user.id, id);
     reloadUserData();
+    if (result.synced) {
+      showSuccess('Pengingat berhasil dihapus.');
+    } else if (result.error) {
+      showError(result.error);
+    }
   };
 
-  const handleAddReminder = (data: Omit<Reminder, 'id' | 'user_id' | 'created_at'>) => {
-    if (!session?.user) return;
-    addReminder(session.user.id, data);
+  const handleAddReminder = async (
+    data: Omit<Reminder, 'id' | 'user_id' | 'created_at'>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await addReminder(session.user.id, data);
     reloadUserData();
+    if (result.synced) {
+      showSuccess('Pengingat baru berhasil disimpan!');
+    } else if (result.error) {
+      showError(result.error);
+    }
+    return { success: result.success, error: result.synced ? undefined : result.error };
   };
 
-  const handleQuickPayReminder = (reminder: Reminder) => {
+  const handleQuickPayReminder = async (reminder: Reminder) => {
     if (!session?.user || !reminder.amount) return;
     // 1. Find suitable tagihan/bill category or fallback
     const billCat =
@@ -136,10 +179,10 @@ export default function App() {
     if (!billCat) return;
 
     // 2. Mark reminder paid
-    toggleReminderStatus(session.user.id, reminder.id);
+    await toggleReminderStatus(session.user.id, reminder.id);
 
     // 3. Create transaction
-    addTransaction(session.user.id, {
+    const result = await addTransaction(session.user.id, {
       category_id: billCat.id,
       type: 'expense',
       amount: reminder.amount,
@@ -153,6 +196,12 @@ export default function App() {
 
     reloadUserData();
     setCurrentTab('history');
+
+    if (result.synced) {
+      showSuccess(`Tagihan "${reminder.title}" berhasil dibayar & dicatat!`);
+    } else if (result.error) {
+      showError(result.error);
+    }
   };
 
   // If user is not authenticated: Show Login View (Guest is prohibited)
@@ -195,14 +244,18 @@ export default function App() {
         {/* Dynamic Main View */}
         <main className="flex-1 overflow-y-auto">
           {currentTab === 'dashboard' && (
-            <DashboardView
-              user={session.user}
-              transactions={transactions}
-              categories={categories}
-              reminders={reminders}
-              onNavigateTab={tab => setCurrentTab(tab)}
-              onSelectTransaction={tx => setSelectedTransaction(tx)}
-            />
+            isInitialLoading ? (
+              <DashboardSkeleton />
+            ) : (
+              <DashboardView
+                user={session.user}
+                transactions={transactions}
+                categories={categories}
+                reminders={reminders}
+                onNavigateTab={tab => setCurrentTab(tab)}
+                onSelectTransaction={tx => setSelectedTransaction(tx)}
+              />
+            )
           )}
 
           {currentTab === 'input' && (
@@ -216,22 +269,30 @@ export default function App() {
           )}
 
           {currentTab === 'history' && (
-            <HistoryView
-              transactions={transactions}
-              categories={categories}
-              onSelectTransaction={tx => setSelectedTransaction(tx)}
-            />
+            isInitialLoading ? (
+              <HistorySkeleton />
+            ) : (
+              <HistoryView
+                transactions={transactions}
+                categories={categories}
+                onSelectTransaction={tx => setSelectedTransaction(tx)}
+              />
+            )
           )}
 
           {currentTab === 'reminders' && (
-            <RemindersView
-              user={session.user}
-              reminders={reminders}
-              onToggleStatus={handleToggleReminderStatus}
-              onDeleteReminder={handleDeleteReminder}
-              onAddReminder={handleAddReminder}
-              onQuickPayAsTransaction={handleQuickPayReminder}
-            />
+            isInitialLoading ? (
+              <RemindersSkeleton />
+            ) : (
+              <RemindersView
+                user={session.user}
+                reminders={reminders}
+                onToggleStatus={handleToggleReminderStatus}
+                onDeleteReminder={handleDeleteReminder}
+                onAddReminder={handleAddReminder}
+                onQuickPayAsTransaction={handleQuickPayReminder}
+              />
+            )
           )}
 
           {currentTab === 'profile' && (

@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Sparkles,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import { Category, Transaction, TransactionType, User } from '../types';
 import { CategoryIcon } from '../components/common/CategoryIcon';
@@ -20,8 +21,12 @@ import { CategoryModal } from '../components/modals/CategoryModal';
 interface InputViewProps {
   user: User;
   categories: Category[];
-  onSaveTransaction: (tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>) => void;
-  onAddCategory: (cat: Omit<Category, 'id' | 'user_id'>) => Category;
+  onSaveTransaction: (
+    tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>
+  ) => Promise<{ success: boolean; error?: string }>;
+  onAddCategory: (
+    cat: Omit<Category, 'id' | 'user_id'>
+  ) => Promise<{ success: boolean; data?: Category; error?: string }>;
   onViewHistory: () => void;
 }
 
@@ -69,6 +74,7 @@ export const InputView: React.FC<InputViewProps> = ({
 
   const [error, setError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter categories by type
   const availableCategories = categories.filter(c => c.type === type);
@@ -116,8 +122,10 @@ export const InputView: React.FC<InputViewProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const rawAmount = amountStr.replace(/\D/g, '');
     if (!rawAmount || parseInt(rawAmount, 10) <= 0) {
       setError('Masukkan nominal transaksi yang valid.');
@@ -132,29 +140,38 @@ export const InputView: React.FC<InputViewProps> = ({
     // Generate ISO TIMESTAMPTZ with full precision
     const txDate = new Date(dateTimeStr).toISOString();
 
-    onSaveTransaction({
-      category_id: activeCategoryId,
-      type,
-      amount: parseInt(rawAmount, 10),
-      transaction_date: txDate,
-      details: {
-        payment_method: paymentMethod || undefined,
-        location: location.trim() || undefined,
-        notes: notes.trim() || undefined,
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
-      },
-    });
+    setIsSubmitting(true);
+    try {
+      const result = await onSaveTransaction({
+        category_id: activeCategoryId,
+        type,
+        amount: parseInt(rawAmount, 10),
+        transaction_date: txDate,
+        details: {
+          payment_method: paymentMethod || undefined,
+          location: location.trim() || undefined,
+          notes: notes.trim() || undefined,
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
+        },
+      });
 
-    // Reset Form
-    setAmountStr('');
-    setNotes('');
-    setLocation('');
-    setPaymentMethod('');
-    setSelectedTags([]);
-    setShowDetails(false);
-    setError('');
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 4500);
+      if (result.success) {
+        // Reset Form
+        setAmountStr('');
+        setNotes('');
+        setLocation('');
+        setPaymentMethod('');
+        setSelectedTags([]);
+        setShowDetails(false);
+        setError('');
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 4500);
+      } else if (result.error) {
+        setError(result.error);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -463,10 +480,20 @@ export const InputView: React.FC<InputViewProps> = ({
         <button
           type="submit"
           id="btn-submit-transaction"
+          disabled={isSubmitting}
           className="btn-primary w-full py-3.5 rounded-2xl text-xs sm:text-sm shadow-md shadow-emerald-600/20"
         >
-          <CheckCircle2 className="w-4 h-4" />
-          <span>Simpan Transaksi</span>
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Menyimpan...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Simpan Transaksi</span>
+            </>
+          )}
         </button>
       </form>
 
@@ -475,9 +502,12 @@ export const InputView: React.FC<InputViewProps> = ({
         isOpen={showCategoryModal}
         onClose={() => setShowCategoryModal(false)}
         defaultType={type}
-        onSave={newCatData => {
-          const created = onAddCategory(newCatData);
-          setSelectedCategoryId(created.id);
+        onSave={async (newCatData) => {
+          const result = await onAddCategory(newCatData);
+          if (result.success && result.data) {
+            setSelectedCategoryId(result.data.id);
+          }
+          return { success: result.success, error: result.error };
         }}
       />
     </div>

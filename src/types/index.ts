@@ -66,3 +66,13 @@ export interface AuthSession {
 export type TimeFilterMode = 'daily' | 'weekly' | 'monthly' | 'all';
 
 export type TabRoute = 'dashboard' | 'history' | 'input' | 'reminders' | 'profile';
+
+// Standard shape returned by every data-mutating operation in services/storage.ts
+// so the UI can show accurate loading/success/error feedback instead of
+// assuming a fire-and-forget write always succeeded.
+export interface MutationResult<T = void> {
+  success: boolean;
+  data?: T;
+  synced: boolean; // true if the change was confirmed saved to the Neon database
+  error?: string;
+}

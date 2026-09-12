@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { Reminder, Transaction, User } from '../types';
 import { formatDateIndo, formatRupiah, getRelativeDays } from '../utils/format';
@@ -17,10 +18,12 @@ import { ReminderModal } from '../components/modals/ReminderModal';
 interface RemindersViewProps {
   user: User;
   reminders: Reminder[];
-  onToggleStatus: (id: string) => void;
-  onDeleteReminder: (id: string) => void;
-  onAddReminder: (data: Omit<Reminder, 'id' | 'user_id' | 'created_at'>) => void;
-  onQuickPayAsTransaction: (reminder: Reminder) => void;
+  onToggleStatus: (id: string) => Promise<void>;
+  onDeleteReminder: (id: string) => Promise<void>;
+  onAddReminder: (
+    data: Omit<Reminder, 'id' | 'user_id' | 'created_at'>
+  ) => Promise<{ success: boolean; error?: string }>;
+  onQuickPayAsTransaction: (reminder: Reminder) => Promise<void>;
 }
 
 export const RemindersView: React.FC<RemindersViewProps> = ({
@@ -33,6 +36,22 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
 }) => {
   const [filterTab, setFilterTab] = useState<'pending' | 'paid' | 'all'>('pending');
   const [showModal, setShowModal] = useState(false);
+  // Tracks reminder ids currently mid-request, so their row controls disable
+  // and show a spinner instead of allowing a double-click during the await.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+
+  const withPending = async (id: string, action: () => Promise<void>) => {
+    setPendingIds(prev => new Set(prev).add(id));
+    try {
+      await action();
+    } finally {
+      setPendingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
 
   const filteredReminders = reminders.filter(r => {
     if (filterTab === 'pending') return r.status === 'pending';
@@ -121,18 +140,20 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
           {filteredReminders.map(rem => {
             const isPaid = rem.status === 'paid';
             const rel = getRelativeDays(rem.due_date);
+            const isPending = pendingIds.has(rem.id);
 
             return (
               <div
                 key={rem.id}
                 className={`card p-3.5 space-y-2.5 transition ${
                   isPaid ? 'opacity-70' : ''
-                }`}
+                } ${isPending ? 'opacity-60 pointer-events-none' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5 min-w-0">
                     <button
-                      onClick={() => onToggleStatus(rem.id)}
+                      onClick={() => withPending(rem.id, () => onToggleStatus(rem.id))}
+                      disabled={isPending}
                       className={`mt-0.5 w-5 h-5 rounded-lg border flex items-center justify-center transition shrink-0 ${
                         isPaid
                           ? 'bg-emerald-600 border-emerald-600 text-white'
@@ -140,7 +161,11 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
                       }`}
                       title={isPaid ? 'Tandai belum bayar' : 'Tandai sudah lunas'}
                     >
-                      <CheckCircle className="w-3.5 h-3.5 fill-current" />
+                      {isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                      ) : (
+                        <CheckCircle className="w-3.5 h-3.5 fill-current" />
+                      )}
                     </button>
                     <div className="min-w-0">
                       <h4
@@ -182,11 +207,16 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
                   </div>
 
                   <button
-                    onClick={() => onDeleteReminder(rem.id)}
-                    className="text-slate-400 hover:text-rose-600 p-1"
+                    onClick={() => withPending(rem.id, () => onDeleteReminder(rem.id))}
+                    disabled={isPending}
+                    className="text-slate-400 hover:text-rose-600 p-1 disabled:opacity-50"
                     title="Hapus pengingat"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
                   </button>
                 </div>
 
@@ -199,11 +229,21 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
                 {/* Quick Convert to Transaction if pending */}
                 {!isPaid && rem.amount && (
                   <button
-                    onClick={() => onQuickPayAsTransaction(rem)}
+                    onClick={() => withPending(rem.id, () => onQuickPayAsTransaction(rem))}
+                    disabled={isPending}
                     className="btn-secondary w-full py-1.5 text-[11px]"
                   >
-                    <Sparkles className="w-3 h-3 text-amber-600" />
-                    <span>Bayar & Catat sebagai Pengeluaran</span>
+                    {isPending ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Memproses...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3 text-amber-600" />
+                        <span>Bayar & Catat sebagai Pengeluaran</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>

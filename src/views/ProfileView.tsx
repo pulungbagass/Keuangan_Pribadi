@@ -10,9 +10,11 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   Server,
+  Loader2,
 } from 'lucide-react';
 import { AuthSession, Category, Reminder, Transaction, User } from '../types';
 import { extendSession } from '../services/auth';
+import { useToast } from '../components/common/Toast';
 import {
   checkDatabaseHealth,
   DatabaseStatus,
@@ -41,11 +43,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onSessionUpdated,
   onReloadData,
 }) => {
+  const { showSuccess, showError } = useToast();
   const [extendedMsg, setExtendedMsg] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [dbStatus, setDbStatus] = useState<DatabaseStatus>({ status: 'loading' });
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     checkDatabaseHealth().then(setDbStatus);
@@ -53,20 +56,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const handleManualSync = async () => {
     setIsSyncing(true);
-    setSyncSuccessMsg(null);
     try {
       const res = await syncUserDataWithServer(session.user.id);
       onReloadData();
       if (res.synced) {
-        setSyncSuccessMsg('Data berhasil disingkronkan dengan server Neon PostgreSQL!');
+        showSuccess('Data berhasil disinkronkan dengan server Neon PostgreSQL!');
       } else {
-        setSyncSuccessMsg('Singkronisasi selesai (mode lokal aktif).');
+        showError('Sinkronisasi gagal, mode lokal tetap aktif. Cek koneksi Anda.');
       }
     } catch (e) {
-      setSyncSuccessMsg('Gagal melakukan singkronisasi.');
+      showError('Gagal melakukan sinkronisasi ke database Neon.');
     } finally {
       setIsSyncing(false);
-      setTimeout(() => setSyncSuccessMsg(null), 3500);
     }
   };
 
@@ -80,23 +81,40 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   const handleResetData = async () => {
-    // Clear transactions & reminders for user
+    setIsResetting(true);
     try {
-      await resetUserDataOnServer(session.user.id);
+      const ok = await resetUserDataOnServer(session.user.id);
       localStorage.removeItem('ck_db_transactions');
       localStorage.removeItem('ck_db_reminders');
       initializeUserDatabase(session.user);
       onReloadData();
       setResetConfirm(false);
+      if (ok) {
+        showSuccess('Seluruh data transaksi & pengingat berhasil dikosongkan.');
+      } else {
+        showError('Data lokal dikosongkan, tapi gagal disinkron ke database Neon.');
+      }
     } catch (e) {
       console.error(e);
+      showError('Terjadi kesalahan saat mengosongkan data.');
+    } finally {
+      setIsResetting(false);
     }
   };
 
   const handleExportAll = () => {
-    const map: Record<string, string> = {};
-    categories.forEach(c => (map[c.id] = c.name));
-    exportTransactionsToCSV(transactions, map, `backup_keuangan_${session.user.name}.csv`);
+    if (transactions.length === 0) {
+      showError('Belum ada transaksi untuk dicadangkan.');
+      return;
+    }
+    try {
+      const map: Record<string, string> = {};
+      categories.forEach(c => (map[c.id] = c.name));
+      exportTransactionsToCSV(transactions, map, `backup_keuangan_${session.user.name}.csv`);
+      showSuccess('File CSV berhasil diunduh.');
+    } catch (e) {
+      showError('Gagal membuat file CSV.');
+    }
   };
 
   return (
@@ -203,13 +221,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             : 'Server saat ini menyimpan ke storage lokal perangkat. Pasang DATABASE_URL di Environment Variables (Vercel) untuk mengaktifkan live database Neon.'}
         </p>
 
-        {syncSuccessMsg && (
-          <p className="text-xs text-emerald-700 font-bold bg-emerald-50 p-2 rounded-xl border border-emerald-100 animate-in fade-in flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>{syncSuccessMsg}</span>
-          </p>
-        )}
-
         <button
           onClick={handleManualSync}
           disabled={isSyncing}
@@ -271,15 +282,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="flex gap-2 pt-1">
               <button
                 onClick={() => setResetConfirm(false)}
-                className="flex-1 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700"
+                disabled={isResetting}
+                className="flex-1 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 disabled:opacity-60"
               >
                 Batal
               </button>
               <button
                 onClick={handleResetData}
-                className="flex-1 py-2 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-700"
+                disabled={isResetting}
+                className="flex-1 py-2 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
-                Ya, Kosongkan Semua
+                {isResetting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Mengosongkan...</span>
+                  </>
+                ) : (
+                  <span>Ya, Kosongkan Semua</span>
+                )}
               </button>
             </div>
           </div>

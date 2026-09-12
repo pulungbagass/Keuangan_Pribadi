@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, Loader2 } from 'lucide-react';
 import { Category, TransactionType } from '../../types';
 import { CategoryIcon } from '../common/CategoryIcon';
 
 interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (cat: Omit<Category, 'id' | 'user_id'>) => void;
+  onSave: (cat: Omit<Category, 'id' | 'user_id'>) => Promise<{ success: boolean; error?: string }>;
   defaultType?: TransactionType;
 }
 
@@ -55,26 +55,36 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   const [selectedColor, setSelectedColor] = useState(AVAILABLE_COLORS[0]);
   const [selectedIcon, setSelectedIcon] = useState(AVAILABLE_ICONS[0]);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('Nama kategori wajib diisi');
       return;
     }
 
-    onSave({
-      name: name.trim(),
-      type,
-      icon_color: selectedColor,
-      icon_name: selectedIcon,
-    });
+    setIsSubmitting(true);
+    try {
+      const result = await onSave({
+        name: name.trim(),
+        type,
+        icon_color: selectedColor,
+        icon_name: selectedIcon,
+      });
 
-    setName('');
-    setError('');
-    onClose();
+      if (result.success) {
+        setName('');
+        setError('');
+        onClose();
+      } else {
+        setError(result.error || 'Gagal menyimpan kategori.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -91,7 +101,8 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+            disabled={isSubmitting}
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -191,6 +202,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSubmitting}
               className="btn-secondary flex-1 py-2.5 text-xs"
             >
               Batal
@@ -198,9 +210,17 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
             <button
               type="submit"
               id="btn-save-category"
+              disabled={isSubmitting}
               className="btn-primary flex-1 py-2.5 text-xs shadow-sm shadow-emerald-600/20"
             >
-              Simpan Kategori
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <span>Simpan Kategori</span>
+              )}
             </button>
           </div>
         </form>

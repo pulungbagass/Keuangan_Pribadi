@@ -12,6 +12,7 @@ import {
   EyeOff,
   UserPlus,
   LogIn,
+  Loader2,
   X,
   Database,
   HelpCircle,
@@ -341,7 +342,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               disabled={isLoading}
               className="btn-primary w-full py-3 px-4 text-xs sm:text-sm shadow-lg shadow-emerald-600/25 mt-2"
             >
-              <LogIn className="w-4 h-4" />
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
               <span>{isLoading ? 'Memproses...' : 'Masuk ke Akun'}</span>
             </button>
 
@@ -452,7 +453,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               disabled={isLoading}
               className="btn-primary w-full py-3 px-4 text-xs sm:text-sm shadow-lg shadow-emerald-600/25 mt-2"
             >
-              <UserPlus className="w-4 h-4" />
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
               <span>{isLoading ? 'Mendaftarkan ke Database...' : 'Daftar Akun Baru'}</span>
             </button>
 

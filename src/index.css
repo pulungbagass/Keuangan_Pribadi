@@ -4,6 +4,17 @@
   html {
     color-scheme: light;
   }
+
+  @keyframes toast-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.5rem) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
 }
 
 @layer components {
@@ -81,5 +92,15 @@
   .modal-panel {
     @apply w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl
       max-h-[90vh] overflow-y-auto;
+  }
+
+  /* Toast entrance animation (used by ToastProvider) */
+  .toast-animate-in {
+    animation: toast-slide-in 0.2s ease-out;
+  }
+
+  /* Skeleton shimmer block, sized/rounded per usage via extra utility classes */
+  .skeleton-block {
+    @apply bg-slate-200/70 rounded-lg animate-pulse;
   }
 }

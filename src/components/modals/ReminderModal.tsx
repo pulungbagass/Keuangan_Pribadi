@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { X, Bell, Calendar, DollarSign, FileText } from 'lucide-react';
+import { X, Bell, Calendar, DollarSign, FileText, Loader2 } from 'lucide-react';
 import { Reminder } from '../../types';
 
 interface ReminderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (reminder: Omit<Reminder, 'id' | 'user_id' | 'created_at'>) => void;
+  onSave: (reminder: Omit<Reminder, 'id' | 'user_id' | 'created_at'>) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const ReminderModal: React.FC<ReminderModalProps> = ({
@@ -22,10 +22,11 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
   });
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setError('Nama atau judul pengingat tagihan wajib diisi');
@@ -38,19 +39,28 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
 
     const cleanAmount = amountStr ? parseInt(amountStr.replace(/\D/g, ''), 10) : undefined;
 
-    onSave({
-      title: title.trim(),
-      amount: cleanAmount && !isNaN(cleanAmount) ? cleanAmount : undefined,
-      due_date: dueDate,
-      status: 'pending',
-      notes: notes.trim() || undefined,
-    });
+    setIsSubmitting(true);
+    try {
+      const result = await onSave({
+        title: title.trim(),
+        amount: cleanAmount && !isNaN(cleanAmount) ? cleanAmount : undefined,
+        due_date: dueDate,
+        status: 'pending',
+        notes: notes.trim() || undefined,
+      });
 
-    setTitle('');
-    setAmountStr('');
-    setNotes('');
-    setError('');
-    onClose();
+      if (result.success) {
+        setTitle('');
+        setAmountStr('');
+        setNotes('');
+        setError('');
+        onClose();
+      } else {
+        setError(result.error || 'Gagal menyimpan pengingat.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,7 +88,8 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+            disabled={isSubmitting}
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -159,6 +170,7 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSubmitting}
               className="btn-secondary flex-1 py-2.5 text-xs"
             >
               Batal
@@ -166,9 +178,17 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
             <button
               type="submit"
               id="btn-save-reminder"
+              disabled={isSubmitting}
               className="btn-primary flex-1 py-2.5 text-xs shadow-sm shadow-emerald-600/20"
             >
-              Simpan Pengingat
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <span>Simpan Pengingat</span>
+              )}
             </button>
           </div>
         </form>

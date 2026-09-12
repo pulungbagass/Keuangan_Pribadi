@@ -4,7 +4,57 @@ Aplikasi pencatatan keuangan pribadi, full online (bukan PWA), dengan
 database Neon PostgreSQL. React + Vite di frontend, Vercel Serverless
 Function (Express) di backend.
 
-## Update terbaru: perombakan konsistensi UI + layout desktop
+## Update terbaru: loading states & user feedback (toast)
+
+Backend/koneksi database, dan seluruh sistem desain UI dari update
+sebelumnya **tidak diubah** — update ini murni menambahkan indikator
+loading dan feedback yang sebelumnya minim, memakai gaya/komponen yang
+sudah ada (tidak ada patokan style baru):
+
+1. **Perbaikan mendasar di `src/services/storage.ts`**: sebelumnya semua
+   fungsi mutasi (`addTransaction`, `addCategory`, `addReminder`, delete,
+   toggle status, dst) memakai pola *fire-and-forget* — langsung `return`
+   setelah nulis ke localStorage, sementara `fetch()` ke Neon jalan di
+   background tanpa ditunggu. Ini artinya UI tidak pernah benar-benar tahu
+   apakah data tersimpan ke database atau gagal. Sekarang semua fungsi ini
+   `async` dan `await` respons Neon sungguhan, mengembalikan
+   `{ success, synced, error }` (tipe `MutationResult` di `types/index.ts`)
+   sehingga UI bisa kasih feedback yang jujur.
+
+2. **Toast notification** (`src/components/common/Toast.tsx`, baru) —
+   dibangun custom pakai token desain yang sudah ada (warna, radius, shadow
+   dari `index.css`), bukan library baru. Dipasang sekali di `main.tsx`
+   lewat `<ToastProvider>`, dipakai lewat `useToast()` di komponen mana pun.
+   Muncul di pojok kanan-atas (desktop) / atas (mobile), auto-hilang ~3.8 detik,
+   bisa ditutup manual.
+
+3. **Skeleton loading** (`src/components/common/Skeletons.tsx`, baru) —
+   `DashboardSkeleton`, `HistorySkeleton`, `RemindersSkeleton` meniru bentuk
+   card asli masing-masing halaman (bukan spinner generik). Tampil saat
+   sinkronisasi data pertama kali dari Neon berlangsung (dicek di `App.tsx`
+   lewat state `isInitialLoading`), lalu otomatis berganti ke tampilan asli.
+
+4. **Tombol submit/mutasi** di seluruh app sekarang: disable saat proses +
+   ganti teks + spinner (`Loader2` dari lucide, ikon yang sudah dipakai app
+   ini) — mencegah double-click:
+   - `InputView` — simpan transaksi
+   - `CategoryModal` — simpan kategori baru
+   - `ReminderModal` — simpan pengingat baru
+   - `TransactionDetailModal` — konfirmasi hapus transaksi
+   - `ProfileView` — sinkronisasi manual (sudah ada sebelumnya, dipertahankan)
+     & kosongkan semua data (baru)
+   - `RemindersView` — toggle lunas/belum, hapus, dan "Bayar & Catat" per
+     baris (state per-item, baris lain tetap bisa dipakai saat satu baris
+     sedang diproses)
+   - `LoginView` — ikon pada tombol masuk/daftar sekarang benar-benar
+     berputar saat loading (sebelumnya cuma teks yang berubah)
+
+5. Toast dipakai untuk semua hasil akhir mutasi (sukses & gagal), kecuali
+   di `InputView` yang sudah punya banner sukses inline dengan shortcut
+   "Lihat Riwayat" — di situ toast hanya dipakai untuk kasus gagal, supaya
+   tidak dobel notifikasi untuk kejadian yang sama.
+
+## Update sebelumnya: perombakan konsistensi UI + layout desktop
 
 Backend/koneksi database **tidak diubah sama sekali** di update ini — murni
 perubahan tampilan. Ringkasan:

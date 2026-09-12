@@ -1,4 +1,4 @@
-import { Category, Reminder, StoredUserAccount, Transaction, User } from '../types';
+import { Category, MutationResult, Reminder, StoredUserAccount, Transaction, User } from '../types';
 
 const STORAGE_USERS_KEY = 'ck_db_users';
 const STORAGE_CATEGORIES_KEY = 'ck_db_categories';
@@ -267,7 +267,10 @@ export function getCategories(userId: string): Category[] {
   return all.filter(c => c.user_id === userId);
 }
 
-export function addCategory(userId: string, data: Omit<Category, 'id' | 'user_id'>): Category {
+export async function addCategory(
+  userId: string,
+  data: Omit<Category, 'id' | 'user_id'>
+): Promise<MutationResult<Category>> {
   const all = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
   const newCat: Category = {
     ...data,
@@ -277,27 +280,52 @@ export function addCategory(userId: string, data: Omit<Category, 'id' | 'user_id
   all.push(newCat);
   saveToStorage(STORAGE_CATEGORIES_KEY, all);
 
-  // Sync to Neon
-  fetch('/api/categories', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newCat),
-  }).catch((err) => console.warn('Neon addCategory sync warning:', err));
-
-  return newCat;
+  // Sync to Neon — awaited so the UI can show accurate loading/feedback
+  try {
+    const res = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCat),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return {
+        success: true, // local write still succeeded, category is usable
+        data: newCat,
+        synced: false,
+        error: errData.error || 'Kategori tersimpan lokal, tapi gagal disinkron ke database Neon.',
+      };
+    }
+    return { success: true, data: newCat, synced: true };
+  } catch (err) {
+    console.warn('Neon addCategory sync warning:', err);
+    return {
+      success: true,
+      data: newCat,
+      synced: false,
+      error: 'Kategori tersimpan lokal, tapi koneksi ke database Neon gagal.',
+    };
+  }
 }
 
-export function deleteCategory(userId: string, categoryId: string): boolean {
+export async function deleteCategory(userId: string, categoryId: string): Promise<MutationResult> {
   const all = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
   const filtered = all.filter(c => !(c.id === categoryId && c.user_id === userId));
   saveToStorage(STORAGE_CATEGORIES_KEY, filtered);
 
-  // Sync to Neon
-  fetch(`/api/categories/${encodeURIComponent(categoryId)}?userId=${encodeURIComponent(userId)}`, {
-    method: 'DELETE',
-  }).catch((err) => console.warn('Neon deleteCategory sync warning:', err));
-
-  return true;
+  try {
+    const res = await fetch(
+      `/api/categories/${encodeURIComponent(categoryId)}?userId=${encodeURIComponent(userId)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      return { success: true, synced: false, error: 'Terhapus lokal, tapi gagal disinkron ke database Neon.' };
+    }
+    return { success: true, synced: true };
+  } catch (err) {
+    console.warn('Neon deleteCategory sync warning:', err);
+    return { success: true, synced: false, error: 'Terhapus lokal, tapi koneksi ke database Neon gagal.' };
+  }
 }
 
 // ---------------- TRANSACTION OPERATIONS ----------------
@@ -308,10 +336,10 @@ export function getTransactions(userId: string): Transaction[] {
     .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
 }
 
-export function addTransaction(
+export async function addTransaction(
   userId: string,
   tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>
-): Transaction {
+): Promise<MutationResult<Transaction>> {
   const all = getFromStorage<Transaction[]>(STORAGE_TRANSACTIONS_KEY, []);
   const newTx: Transaction = {
     ...tx,
@@ -322,24 +350,40 @@ export function addTransaction(
   all.unshift(newTx);
   saveToStorage(STORAGE_TRANSACTIONS_KEY, all);
 
-  // Sync to Neon
-  fetch('/api/transactions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newTx),
-  }).catch((err) => console.warn('Neon addTransaction sync warning:', err));
-
-  return newTx;
+  try {
+    const res = await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTx),
+    });
+    if (!res.ok) {
+      return {
+        success: true,
+        data: newTx,
+        synced: false,
+        error: 'Transaksi tersimpan lokal, tapi gagal disinkron ke database Neon.',
+      };
+    }
+    return { success: true, data: newTx, synced: true };
+  } catch (err) {
+    console.warn('Neon addTransaction sync warning:', err);
+    return {
+      success: true,
+      data: newTx,
+      synced: false,
+      error: 'Transaksi tersimpan lokal, tapi koneksi ke database Neon gagal.',
+    };
+  }
 }
 
-export function updateTransaction(
+export async function updateTransaction(
   userId: string,
   id: string,
   updates: Partial<Omit<Transaction, 'id' | 'user_id' | 'created_at'>>
-): Transaction | null {
+): Promise<MutationResult<Transaction>> {
   const all = getFromStorage<Transaction[]>(STORAGE_TRANSACTIONS_KEY, []);
   const idx = all.findIndex(t => t.id === id && t.user_id === userId);
-  if (idx === -1) return null;
+  if (idx === -1) return { success: false, synced: false, error: 'Transaksi tidak ditemukan.' };
 
   all[idx] = {
     ...all[idx],
@@ -352,27 +396,50 @@ export function updateTransaction(
 
   saveToStorage(STORAGE_TRANSACTIONS_KEY, all);
 
-  // Sync update to Neon
-  fetch('/api/transactions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(all[idx]),
-  }).catch((err) => console.warn('Neon updateTransaction sync warning:', err));
-
-  return all[idx];
+  try {
+    const res = await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(all[idx]),
+    });
+    if (!res.ok) {
+      return {
+        success: true,
+        data: all[idx],
+        synced: false,
+        error: 'Perubahan tersimpan lokal, tapi gagal disinkron ke database Neon.',
+      };
+    }
+    return { success: true, data: all[idx], synced: true };
+  } catch (err) {
+    console.warn('Neon updateTransaction sync warning:', err);
+    return {
+      success: true,
+      data: all[idx],
+      synced: false,
+      error: 'Perubahan tersimpan lokal, tapi koneksi ke database Neon gagal.',
+    };
+  }
 }
 
-export function deleteTransaction(userId: string, id: string): boolean {
+export async function deleteTransaction(userId: string, id: string): Promise<MutationResult> {
   const all = getFromStorage<Transaction[]>(STORAGE_TRANSACTIONS_KEY, []);
   const filtered = all.filter(t => !(t.id === id && t.user_id === userId));
   saveToStorage(STORAGE_TRANSACTIONS_KEY, filtered);
 
-  // Sync to Neon
-  fetch(`/api/transactions/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`, {
-    method: 'DELETE',
-  }).catch((err) => console.warn('Neon deleteTransaction sync warning:', err));
-
-  return true;
+  try {
+    const res = await fetch(
+      `/api/transactions/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      return { success: true, synced: false, error: 'Terhapus lokal, tapi gagal disinkron ke database Neon.' };
+    }
+    return { success: true, synced: true };
+  } catch (err) {
+    console.warn('Neon deleteTransaction sync warning:', err);
+    return { success: true, synced: false, error: 'Terhapus lokal, tapi koneksi ke database Neon gagal.' };
+  }
 }
 
 // ---------------- REMINDER OPERATIONS ----------------
@@ -383,10 +450,10 @@ export function getReminders(userId: string): Reminder[] {
     .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
 }
 
-export function addReminder(
+export async function addReminder(
   userId: string,
   data: Omit<Reminder, 'id' | 'user_id' | 'created_at'>
-): Reminder {
+): Promise<MutationResult<Reminder>> {
   const all = getFromStorage<Reminder[]>(STORAGE_REMINDERS_KEY, []);
   const newReminder: Reminder = {
     ...data,
@@ -397,45 +464,84 @@ export function addReminder(
   all.push(newReminder);
   saveToStorage(STORAGE_REMINDERS_KEY, all);
 
-  // Sync to Neon
-  fetch('/api/reminders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newReminder),
-  }).catch((err) => console.warn('Neon addReminder sync warning:', err));
-
-  return newReminder;
+  try {
+    const res = await fetch('/api/reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newReminder),
+    });
+    if (!res.ok) {
+      return {
+        success: true,
+        data: newReminder,
+        synced: false,
+        error: 'Pengingat tersimpan lokal, tapi gagal disinkron ke database Neon.',
+      };
+    }
+    return { success: true, data: newReminder, synced: true };
+  } catch (err) {
+    console.warn('Neon addReminder sync warning:', err);
+    return {
+      success: true,
+      data: newReminder,
+      synced: false,
+      error: 'Pengingat tersimpan lokal, tapi koneksi ke database Neon gagal.',
+    };
+  }
 }
 
-export function toggleReminderStatus(userId: string, id: string): Reminder | null {
+export async function toggleReminderStatus(userId: string, id: string): Promise<MutationResult<Reminder>> {
   const all = getFromStorage<Reminder[]>(STORAGE_REMINDERS_KEY, []);
   const item = all.find(r => r.id === id && r.user_id === userId);
-  if (!item) return null;
+  if (!item) return { success: false, synced: false, error: 'Pengingat tidak ditemukan.' };
 
   item.status = item.status === 'pending' ? 'paid' : 'pending';
   saveToStorage(STORAGE_REMINDERS_KEY, all);
 
-  // Sync to Neon
-  fetch(`/api/reminders/${encodeURIComponent(id)}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: item.status, user_id: userId }),
-  }).catch((err) => console.warn('Neon toggleReminder sync warning:', err));
-
-  return item;
+  try {
+    const res = await fetch(`/api/reminders/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: item.status, user_id: userId }),
+    });
+    if (!res.ok) {
+      return {
+        success: true,
+        data: item,
+        synced: false,
+        error: 'Status tersimpan lokal, tapi gagal disinkron ke database Neon.',
+      };
+    }
+    return { success: true, data: item, synced: true };
+  } catch (err) {
+    console.warn('Neon toggleReminder sync warning:', err);
+    return {
+      success: true,
+      data: item,
+      synced: false,
+      error: 'Status tersimpan lokal, tapi koneksi ke database Neon gagal.',
+    };
+  }
 }
 
-export function deleteReminder(userId: string, id: string): boolean {
+export async function deleteReminder(userId: string, id: string): Promise<MutationResult> {
   const all = getFromStorage<Reminder[]>(STORAGE_REMINDERS_KEY, []);
   const filtered = all.filter(r => !(r.id === id && r.user_id === userId));
   saveToStorage(STORAGE_REMINDERS_KEY, filtered);
 
-  // Sync to Neon
-  fetch(`/api/reminders/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`, {
-    method: 'DELETE',
-  }).catch((err) => console.warn('Neon deleteReminder sync warning:', err));
-
-  return true;
+  try {
+    const res = await fetch(
+      `/api/reminders/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      return { success: true, synced: false, error: 'Terhapus lokal, tapi gagal disinkron ke database Neon.' };
+    }
+    return { success: true, synced: true };
+  } catch (err) {
+    console.warn('Neon deleteReminder sync warning:', err);
+    return { success: true, synced: false, error: 'Terhapus lokal, tapi koneksi ke database Neon gagal.' };
+  }
 }
 
 // ---------------- CSV EXPORT ----------------

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, MapPin, CreditCard, Tag, FileText, Calendar, Clock, AlertTriangle } from 'lucide-react';
+import { X, Trash2, MapPin, CreditCard, Tag, FileText, Calendar, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { Transaction, Category } from '../../types';
 import { formatRupiah, formatDateTimeIndo, formatTimeIndo } from '../../utils/format';
 import { CategoryIcon } from '../common/CategoryIcon';
@@ -8,7 +8,7 @@ interface TransactionDetailModalProps {
   transaction: Transaction | null;
   category?: Category;
   onClose: () => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
 }
 
 export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
@@ -18,11 +18,22 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   onDelete,
 }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (!transaction) return null;
 
   const isIncome = transaction.type === 'income';
   const details = transaction.details || {};
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete(transaction.id);
+      // onClose/onDelete already clears selection from the parent on success
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="modal-overlay animate-in fade-in">
@@ -161,18 +172,24 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
               <div className="flex gap-2">
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className="flex-1 py-2 bg-white text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50"
+                  disabled={isDeleting}
+                  className="flex-1 py-2 bg-white text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50 disabled:opacity-60"
                 >
                   Batal
                 </button>
                 <button
-                  onClick={() => {
-                    onDelete(transaction.id);
-                    onClose();
-                  }}
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
                   className="btn-danger flex-1 py-2 text-xs"
                 >
-                  Ya, Hapus
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menghapus...</span>
+                    </>
+                  ) : (
+                    <span>Ya, Hapus</span>
+                  )}
                 </button>
               </div>
             </div>
