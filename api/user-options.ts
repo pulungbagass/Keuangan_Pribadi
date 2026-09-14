@@ -9,9 +9,6 @@ const DEFAULT_TAGS = ['Primer', 'Sekunder', 'Lifestyle', 'Kerja', 'Keluarga', 'M
 export default async function handler(req: any, res: any) {
   const sql = getDb();
   if (!sql) return res.status(503).json({ error: 'DATABASE_URL belum dikonfigurasi.' });
-  const ready = await ensureTablesExist();
-  if (!ready.ok) return res.status(500).json({ error: ready.message });
-
   try {
     if (req.method === 'GET') {
       const userId = String(req.query?.userId || '');
@@ -45,6 +42,23 @@ export default async function handler(req: any, res: any) {
         `;
       }
       return res.status(200).json({ options: rows });
+    }
+
+    if (req.method === 'DELETE') {
+      const userId = String(req.query?.userId || '');
+      const id = String(req.query?.id || '');
+      if (!userId || !id) return res.status(400).json({ error: 'userId dan id wajib diisi.' });
+
+      const result = await sql`
+        DELETE FROM user_transaction_options
+        WHERE id = ${id} AND user_id = ${userId}
+        RETURNING id
+      `;
+
+      if (result.length === 0) {
+        return res.status(404).json({ error: 'Pilihan tidak ditemukan.' });
+      }
+      return res.status(200).json({ success: true, deleted: 1 });
     }
 
     if (req.method === 'POST') {

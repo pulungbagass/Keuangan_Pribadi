@@ -454,22 +454,25 @@ export async function addUserOption(
     position,
     created_at: new Date().toISOString(),
   };
+
+  // Optimistic local update: the form/UI must not wait for Neon round-trip.
   saveToStorage(STORAGE_OPTIONS_KEY, [...all, option]);
 
-  try {
-    const res = await fetch('/api/user-options', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(option),
-    });
+  // Sync in the background. The local UI is already updated immediately.
+  void fetch('/api/user-options', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(option),
+  }).then(async res => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { success: true, data: option, synced: false, error: err.error || 'Pilihan tersimpan lokal, tapi gagal disinkron ke Neon.' };
+      console.warn('Neon addUserOption sync failed:', err.error || res.statusText);
     }
-    return { success: true, data: option, synced: true };
-  } catch {
-    return { success: true, data: option, synced: false, error: 'Pilihan tersimpan lokal, tapi koneksi ke database Neon gagal.' };
-  }
+  }).catch(err => {
+    console.warn('Neon addUserOption sync failed:', err);
+  });
+
+  return { success: true, data: option, synced: false };
 }
 
 export async function deleteUserOption(userId: string, id: string): Promise<MutationResult> {
@@ -477,21 +480,23 @@ export async function deleteUserOption(userId: string, id: string): Promise<Muta
   const item = all.find(o => o.id === id && o.user_id === userId);
   if (!item) return { success: false, synced: false, error: 'Pilihan tidak ditemukan.' };
 
+  // Optimistic local delete: remove it from the UI immediately.
   saveToStorage(STORAGE_OPTIONS_KEY, all.filter(o => !(o.id === id && o.user_id === userId)));
 
-  try {
-    const res = await fetch(
-      `/api/user-options/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`,
-      { method: 'DELETE' }
-    );
+  // Sync deletion in the background. Scope is always user_id + id.
+  void fetch(
+    `/api/user-options?id=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`,
+    { method: 'DELETE' }
+  ).then(async res => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { success: true, synced: false, error: err.error || 'Terhapus lokal, tapi gagal disinkron ke Neon.' };
+      console.warn('Neon deleteUserOption sync failed:', err.error || res.statusText);
     }
-    return { success: true, synced: true };
-  } catch {
-    return { success: true, synced: false, error: 'Terhapus lokal, tapi koneksi ke database Neon gagal.' };
-  }
+  }).catch(err => {
+    console.warn('Neon deleteUserOption sync failed:', err);
+  });
+
+  return { success: true, synced: false };
 }
 
 // ---------------- TRANSACTION OPERATIONS ----------------

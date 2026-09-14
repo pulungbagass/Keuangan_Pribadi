@@ -181,8 +181,11 @@ export default function App() {
       if (kind === 'payment_method') setPaymentMethods(getUserOptions(session.user.id, kind));
       else setTags(getUserOptions(session.user.id, kind));
     }
-    if (!result.synced && result.error) showError(result.error);
-    return { success: result.success, data: result.data, error: result.synced ? undefined : result.error };
+    // The option is updated locally immediately; Neon sync happens in the service.
+    // Only surface an actual error, not the normal server round-trip latency.
+    if (result.error) showError(result.error);
+    else if (result.success && result.data) showSuccess('Pilihan ditambahkan.');
+    return { success: result.success, data: result.data, error: result.error };
   };
 
   const handleDeleteOption = async (id: string): Promise<{ success: boolean; error?: string }> => {
@@ -192,9 +195,9 @@ export default function App() {
       setPaymentMethods(getUserOptions(session.user.id, 'payment_method'));
       setTags(getUserOptions(session.user.id, 'tag'));
     }
-    if (result.synced) showSuccess('Pilihan berhasil dihapus.');
+    if (result.success) showSuccess('Pilihan berhasil dihapus.');
     else if (result.error) showError(result.error);
-    return { success: result.success, error: result.synced ? undefined : result.error };
+    return { success: result.success, error: result.error };
   };
 
   // Reminder Actions
