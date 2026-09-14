@@ -7,6 +7,8 @@ import {
   FileText,
   CreditCard,
   Tag,
+  Trash2,
+  GripVertical,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
@@ -14,7 +16,7 @@ import {
   ArrowRight,
   Loader2,
 } from 'lucide-react';
-import { Category, Transaction, TransactionType, User } from '../types';
+import { Category, Transaction, TransactionType, User, UserOption, UserOptionKind } from '../types';
 import { CategoryIcon } from '../components/common/CategoryIcon';
 import { CategoryModal } from '../components/modals/CategoryModal';
 
@@ -27,27 +29,26 @@ interface InputViewProps {
   onAddCategory: (
     cat: Omit<Category, 'id' | 'user_id'>
   ) => Promise<{ success: boolean; data?: Category; error?: string }>;
+  onDeleteCategory: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onReorderCategories: (ids: string[]) => Promise<{ success: boolean; error?: string }>;
+  paymentMethods: UserOption[];
+  tags: UserOption[];
+  onAddOption: (kind: UserOptionKind, value: string) => Promise<{ success: boolean; data?: UserOption; error?: string }>;
+  onDeleteOption: (id: string) => Promise<{ success: boolean; error?: string }>;
   onViewHistory: () => void;
 }
-
-const COMMON_PAYMENT_METHODS = [
-  'Tunai / Cash',
-  'QRIS BCA',
-  'Transfer Mandiri',
-  'Transfer BRI',
-  'GoPay',
-  'OVO',
-  'ShopeePay',
-  'Kartu Kredit',
-];
-
-const COMMON_TAGS = ['Primer', 'Sekunder', 'Lifestyle', 'Kerja', 'Keluarga', 'Mendesak', 'Harian'];
 
 export const InputView: React.FC<InputViewProps> = ({
   user,
   categories,
   onSaveTransaction,
   onAddCategory,
+  onDeleteCategory,
+  onReorderCategories,
+  paymentMethods,
+  tags,
+  onAddOption,
+  onDeleteOption,
   onViewHistory,
 }) => {
   const [type, setType] = useState<TransactionType>('expense');
@@ -62,6 +63,8 @@ export const InputView: React.FC<InputViewProps> = ({
   const [notes, setNotes] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
+  const [pendingOptionId, setPendingOptionId] = useState<string | null>(null);
 
   // Date & Time (TIMESTAMPTZ default to now)
   const [dateTimeStr, setDateTimeStr] = useState(() => {
@@ -111,15 +114,64 @@ export const InputView: React.FC<InputViewProps> = ({
     }
   };
 
-  const handleAddCustomTag = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && customTagInput.trim()) {
-      e.preventDefault();
-      const t = customTagInput.trim().toLowerCase();
-      if (!selectedTags.includes(t)) {
-        setSelectedTags([...selectedTags, t]);
-      }
-      setCustomTagInput('');
+  const handleAddOption = async (
+    kind: UserOptionKind,
+    value: string,
+    afterSave?: (saved: UserOption) => void
+  ) => {
+    const clean = value.trim();
+    if (!clean) return;
+    const result = await onAddOption(kind, clean);
+    if (result.success && result.data) {
+      afterSave?.(result.data);
+    } else if (result.error) {
+      setError(result.error);
     }
+  };
+
+  const handlePaymentKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    await handleAddOption('payment_method', paymentMethod, saved => setPaymentMethod(saved.value));
+  };
+
+  const handleAddCustomTag = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const value = customTagInput;
+    setCustomTagInput('');
+    await handleAddOption('tag', value, saved => {
+      if (!selectedTags.some(t => t.toLowerCase() === saved.value.toLowerCase())) {
+        setSelectedTags(prev => [...prev, saved.value]);
+      }
+    });
+  };
+
+  const handleDeleteOption = async (option: UserOption) => {
+    setPendingOptionId(option.id);
+    try {
+      const result = await onDeleteOption(option.id);
+      if (result.success) {
+        if (option.kind === 'payment_method' && paymentMethod === option.value) setPaymentMethod('');
+        setSelectedTags(prev => prev.filter(t => t.toLowerCase() !== option.value.toLowerCase()));
+      } else if (result.error) {
+        setError(result.error);
+      }
+    } finally {
+      setPendingOptionId(null);
+    }
+  };
+
+  const handleDropCategory = async (targetId: string) => {
+    if (!draggedCategoryId || draggedCategoryId === targetId) return;
+    const current = [...availableCategories];
+    const from = current.findIndex(c => c.id === draggedCategoryId);
+    const to = current.findIndex(c => c.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = current.splice(from, 1);
+    current.splice(to, 0, moved);
+    setDraggedCategoryId(null);
+    await onReorderCategories(current.map(c => c.id));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,6 +189,23 @@ export const InputView: React.FC<InputViewProps> = ({
       return;
     }
 
+    // Persist anything typed directly into the detail fields before saving the transaction.
+    let finalPaymentMethod = paymentMethod.trim() || undefined;
+    if (finalPaymentMethod) {
+      const optionResult = await onAddOption('payment_method', finalPaymentMethod);
+      if (optionResult.success && optionResult.data) finalPaymentMethod = optionResult.data.value;
+    }
+
+    let finalTags = [...selectedTags];
+    if (customTagInput.trim()) {
+      const optionResult = await onAddOption('tag', customTagInput.trim());
+      if (optionResult.success && optionResult.data) {
+        if (!finalTags.some(t => t.toLowerCase() === optionResult.data!.value.toLowerCase())) {
+          finalTags.push(optionResult.data.value);
+        }
+      }
+    }
+
     // Generate ISO TIMESTAMPTZ with full precision
     const txDate = new Date(dateTimeStr).toISOString();
 
@@ -148,10 +217,10 @@ export const InputView: React.FC<InputViewProps> = ({
         amount: parseInt(rawAmount, 10),
         transaction_date: txDate,
         details: {
-          payment_method: paymentMethod || undefined,
+          payment_method: finalPaymentMethod,
           location: location.trim() || undefined,
           notes: notes.trim() || undefined,
-          tags: selectedTags.length > 0 ? selectedTags : undefined,
+          tags: finalTags.length > 0 ? finalTags : undefined,
         },
       });
 
@@ -162,6 +231,7 @@ export const InputView: React.FC<InputViewProps> = ({
         setLocation('');
         setPaymentMethod('');
         setSelectedTags([]);
+        setCustomTagInput('');
         setShowDetails(false);
         setError('');
         setSavedSuccess(true);
@@ -300,33 +370,52 @@ export const InputView: React.FC<InputViewProps> = ({
             </button>
           </div>
 
-          {/* Category Chips Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+          {/* Category Grid — drag to reorder, trash to delete */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1">
             {availableCategories.map(cat => {
               const isSelected = activeCategoryId === cat.id;
               return (
-                <button
+                <div
                   key={cat.id}
-                  type="button"
-                  onClick={() => setSelectedCategoryId(cat.id)}
-                  className={`flex items-center gap-2 p-2 rounded-xl text-left border transition active:scale-98 ${
+                  draggable
+                  onDragStart={() => setDraggedCategoryId(cat.id)}
+                  onDragEnd={() => setDraggedCategoryId(null)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={() => void handleDropCategory(cat.id)}
+                  className={`relative flex items-center gap-1.5 p-2 rounded-xl text-left border transition cursor-grab active:cursor-grabbing ${
                     isSelected
                       ? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-1 ring-emerald-500/20'
                       : 'border-slate-100 hover:bg-slate-50'
-                  }`}
+                  } ${draggedCategoryId === cat.id ? 'opacity-40' : ''}`}
                 >
-                  <CategoryIcon
-                    iconName={cat.icon_name}
-                    color={cat.icon_color}
-                    size="sm"
-                  />
-                  <span className="text-xs font-semibold text-slate-800 truncate">
-                    {cat.name}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategoryId(cat.id)}
+                    className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                  >
+                    <CategoryIcon iconName={cat.icon_name} color={cat.icon_color} size="sm" />
+                    <span className="text-xs font-semibold text-slate-800 truncate">{cat.name}</span>
+                  </button>
+                  <div className="flex items-center shrink-0">
+                    <GripVertical className="w-3.5 h-3.5 text-slate-300" />
+                    <button
+                      type="button"
+                      title="Hapus kategori"
+                      onClick={async e => {
+                        e.stopPropagation();
+                        await onDeleteCategory(cat.id);
+                        if (selectedCategoryId === cat.id) setSelectedCategoryId('');
+                      }}
+                      className="p-1 text-slate-300 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>
+          <p className="text-[10px] text-slate-400">Tarik kartu kategori untuk mengubah urutan. Ikon tempat sampah untuk menghapus.</p>
         </div>
 
         {/* Date & Time Input (TIMESTAMPTZ second precision) */}
@@ -384,26 +473,36 @@ export const InputView: React.FC<InputViewProps> = ({
                   <span>Metode Pembayaran</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {COMMON_PAYMENT_METHODS.map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPaymentMethod(m)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                        paymentMethod === m
-                          ? 'bg-slate-800 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {m}
-                    </button>
+                  {paymentMethods.map(option => (
+                    <div key={option.id} className="inline-flex items-center rounded-lg bg-slate-100 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod(option.value)}
+                        className={`px-2.5 py-1 text-[11px] font-semibold transition ${
+                          paymentMethod === option.value ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {option.value}
+                      </button>
+                      <button
+                        type="button"
+                        title="Hapus metode pembayaran"
+                        disabled={pendingOptionId === option.id}
+                        onClick={() => void handleDeleteOption(option)}
+                        className="px-1.5 py-1 text-slate-400 hover:text-rose-600 disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   ))}
                 </div>
                 <input
                   type="text"
-                  placeholder="Atau ketik metode lainnya (cth: OVO Cash)"
+                  placeholder="Ketik metode baru lalu tekan Enter..."
                   value={paymentMethod}
                   onChange={e => setPaymentMethod(e.target.value)}
+                  onKeyDown={handlePaymentKeyDown}
+                  onBlur={() => void handleAddOption('payment_method', paymentMethod, saved => setPaymentMethod(saved.value))}
                   className="field-input px-3 py-2"
                 />
               </div>
@@ -445,21 +544,31 @@ export const InputView: React.FC<InputViewProps> = ({
                   <span>Label / Tags</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {COMMON_TAGS.map(t => {
-                    const isSelected = selectedTags.includes(t);
+                  {tags.map(option => {
+                    const isSelected = selectedTags.some(t => t.toLowerCase() === option.value.toLowerCase());
                     return (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => toggleTag(t)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        #{t}
-                      </button>
+                      <div key={option.id} className={`inline-flex items-center rounded-lg overflow-hidden ${
+                        isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100'
+                      }`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleTag(option.value)}
+                          className={`px-2.5 py-1 text-[11px] font-semibold transition ${
+                            isSelected ? 'text-white' : 'text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          #{option.value}
+                        </button>
+                        <button
+                          type="button"
+                          title="Hapus label"
+                          disabled={pendingOptionId === option.id}
+                          onClick={() => void handleDeleteOption(option)}
+                          className={`px-1.5 py-1 disabled:opacity-40 ${isSelected ? 'text-emerald-100 hover:text-white' : 'text-slate-400 hover:text-rose-600'}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -469,6 +578,16 @@ export const InputView: React.FC<InputViewProps> = ({
                   value={customTagInput}
                   onChange={e => setCustomTagInput(e.target.value)}
                   onKeyDown={handleAddCustomTag}
+                  onBlur={() => {
+                    if (customTagInput.trim()) {
+                      void handleAddOption('tag', customTagInput, saved => {
+                        if (!selectedTags.some(t => t.toLowerCase() === saved.value.toLowerCase())) {
+                          setSelectedTags(prev => [...prev, saved.value]);
+                        }
+                        setCustomTagInput('');
+                      });
+                    }
+                  }}
                   className="field-input px-3 py-1.5"
                 />
               </div>

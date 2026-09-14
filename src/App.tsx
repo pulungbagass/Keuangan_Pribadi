@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AuthSession, Category, Reminder, TabRoute, Transaction } from './types';
+import { AuthSession, Category, Reminder, TabRoute, Transaction, UserOption, UserOptionKind } from './types';
 import { clearSession, getStoredSession } from './services/auth';
 import { useToast } from './components/common/Toast';
 import { DashboardSkeleton, HistorySkeleton, RemindersSkeleton } from './components/common/Skeletons';
@@ -14,11 +14,17 @@ import {
   addTransaction,
   deleteReminder,
   deleteTransaction,
+  deleteCategory,
+  reorderCategories,
+  getUserOptions,
+  addUserOption,
+  deleteUserOption,
   getCategories,
   getReminders,
   getTransactions,
   initializeUserDatabase,
   syncUserDataWithServer,
+  syncUserOptionsWithServer,
   toggleReminderStatus,
 } from './services/storage';
 import { TopBar } from './components/navigation/TopBar';
@@ -40,6 +46,8 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<UserOption[]>([]);
+  const [tags, setTags] = useState<UserOption[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   // True only until the very first data sync (on login/session restore) resolves,
   // so Dashboard/History/Reminders can show a skeleton instead of an empty state.
@@ -52,18 +60,29 @@ export default function App() {
     const txs = getTransactions(session.user.id);
     const cats = getCategories(session.user.id);
     const rems = getReminders(session.user.id);
+    const methods = getUserOptions(session.user.id, 'payment_method');
+    const userTags = getUserOptions(session.user.id, 'tag');
     setTransactions(txs);
     setCategories(cats);
     setReminders(rems);
+    setPaymentMethods(methods);
+    setTags(userTags);
 
     // Sync in background from Neon PostgreSQL if server is connected
-    syncUserDataWithServer(session.user.id)
-      .then((res) => {
+    Promise.all([
+      syncUserDataWithServer(session.user.id),
+      syncUserOptionsWithServer(session.user.id),
+    ])
+      .then(([res]) => {
         if (res.synced) {
           setTransactions(getTransactions(session.user.id));
           setCategories(getCategories(session.user.id));
           setReminders(getReminders(session.user.id));
+          setPaymentMethods(getUserOptions(session.user.id, 'payment_method'));
+          setTags(getUserOptions(session.user.id, 'tag'));
         }
+        setPaymentMethods(getUserOptions(session.user.id, 'payment_method'));
+        setTags(getUserOptions(session.user.id, 'tag'));
       })
       .finally(() => setIsInitialLoading(false));
   }, [session?.user]);
@@ -80,6 +99,8 @@ export default function App() {
     setTransactions([]);
     setCategories([]);
     setReminders([]);
+    setPaymentMethods([]);
+    setTags([]);
     setCurrentTab('dashboard');
   }, []);
 
@@ -131,6 +152,49 @@ export default function App() {
       showError(result.error);
     }
     return { success: result.success, data: result.data, error: result.synced ? undefined : result.error };
+  };
+
+  const handleDeleteCategory = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await deleteCategory(session.user.id, id);
+    reloadUserData();
+    if (result.synced) showSuccess('Kategori berhasil dihapus.');
+    else if (result.error) showError(result.error);
+    return { success: result.success, error: result.synced ? undefined : result.error };
+  };
+
+  const handleReorderCategories = async (ids: string[]): Promise<{ success: boolean; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await reorderCategories(session.user.id, ids);
+    if (!result.synced && result.error) showError(result.error);
+    setCategories(getCategories(session.user.id));
+    return { success: result.success, error: result.synced ? undefined : result.error };
+  };
+
+  const handleAddOption = async (
+    kind: UserOptionKind,
+    value: string
+  ): Promise<{ success: boolean; data?: UserOption; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await addUserOption(session.user.id, kind, value);
+    if (result.success) {
+      if (kind === 'payment_method') setPaymentMethods(getUserOptions(session.user.id, kind));
+      else setTags(getUserOptions(session.user.id, kind));
+    }
+    if (!result.synced && result.error) showError(result.error);
+    return { success: result.success, data: result.data, error: result.synced ? undefined : result.error };
+  };
+
+  const handleDeleteOption = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
+    const result = await deleteUserOption(session.user.id, id);
+    if (result.success) {
+      setPaymentMethods(getUserOptions(session.user.id, 'payment_method'));
+      setTags(getUserOptions(session.user.id, 'tag'));
+    }
+    if (result.synced) showSuccess('Pilihan berhasil dihapus.');
+    else if (result.error) showError(result.error);
+    return { success: result.success, error: result.synced ? undefined : result.error };
   };
 
   // Reminder Actions
@@ -264,6 +328,12 @@ export default function App() {
               categories={categories}
               onSaveTransaction={handleSaveTransaction}
               onAddCategory={handleAddCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onReorderCategories={handleReorderCategories}
+              paymentMethods={paymentMethods}
+              tags={tags}
+              onAddOption={handleAddOption}
+              onDeleteOption={handleDeleteOption}
               onViewHistory={() => setCurrentTab('history')}
             />
           )}

@@ -1,9 +1,10 @@
-import { Category, MutationResult, Reminder, StoredUserAccount, Transaction, User } from '../types';
+import { Category, MutationResult, Reminder, StoredUserAccount, Transaction, User, UserOption, UserOptionKind } from '../types';
 
 const STORAGE_USERS_KEY = 'ck_db_users';
 const STORAGE_CATEGORIES_KEY = 'ck_db_categories';
 const STORAGE_TRANSACTIONS_KEY = 'ck_db_transactions';
 const STORAGE_REMINDERS_KEY = 'ck_db_reminders';
+const STORAGE_OPTIONS_KEY = 'ck_db_transaction_options';
 
 // Hash helper for secure local password storage
 export async function hashPassword(password: string): Promise<string> {
@@ -21,6 +22,20 @@ export async function hashPassword(password: string): Promise<string> {
   // Fallback simple string hash
   return btoa(unescape(encodeURIComponent(password + '_salt')));
 }
+
+
+export const DEFAULT_PAYMENT_METHODS = [
+  'Tunai / Cash',
+  'QRIS BCA',
+  'Transfer Mandiri',
+  'Transfer BRI',
+  'GoPay',
+  'OVO',
+  'ShopeePay',
+  'Kartu Kredit',
+];
+
+export const DEFAULT_TAGS = ['Primer', 'Sekunder', 'Lifestyle', 'Kerja', 'Keluarga', 'Mendesak', 'Harian'];
 
 // Default categories template
 export const DEFAULT_EXPENSE_CATEGORIES = [
@@ -96,6 +111,7 @@ export function initializeUserDatabase(user: User): void {
         icon_color: cat.icon_color,
         icon_name: cat.icon_name,
         is_default: true,
+        position: idx,
       })),
       ...DEFAULT_INCOME_CATEGORIES.map((cat, idx) => ({
         id: `cat_inc_${user.id}_${idx + 1}`,
@@ -105,12 +121,36 @@ export function initializeUserDatabase(user: User): void {
         icon_color: cat.icon_color,
         icon_name: cat.icon_name,
         is_default: true,
+        position: idx,
       })),
     ];
     saveToStorage(STORAGE_CATEGORIES_KEY, [...categories, ...newCategories]);
   }
 
-  // 3. Transactions & Reminders are clean/empty by default (No dummy data)
+  // 3. Seed transaction options per-user. Options are never shared between users.
+  const options = getFromStorage<UserOption[]>(STORAGE_OPTIONS_KEY, []);
+  const userOptions = options.filter(o => o.user_id === user.id);
+  if (userOptions.length === 0) {
+    const defaults: UserOption[] = [
+      ...DEFAULT_PAYMENT_METHODS.map((value, index) => ({
+        id: `opt_payment_${user.id}_${index + 1}`,
+        user_id: user.id,
+        kind: 'payment_method' as const,
+        value,
+        position: index,
+      })),
+      ...DEFAULT_TAGS.map((value, index) => ({
+        id: `opt_tag_${user.id}_${index + 1}`,
+        user_id: user.id,
+        kind: 'tag' as const,
+        value,
+        position: index,
+      })),
+    ];
+    saveToStorage(STORAGE_OPTIONS_KEY, [...options, ...defaults]);
+  }
+
+  // 4. Transactions & Reminders are clean/empty by default (No dummy data)
 }
 
 // ---------------- SERVER & DATABASE STATUS ----------------
@@ -154,12 +194,34 @@ export async function syncUserDataWithServer(userId: string): Promise<{ synced: 
       if (Array.isArray(data.reminders)) {
         saveToStorage(STORAGE_REMINDERS_KEY, data.reminders);
       }
+      if (Array.isArray(data.options)) {
+        const existing = getFromStorage<UserOption[]>(STORAGE_OPTIONS_KEY, []);
+        const otherUsersOptions = existing.filter(o => o.user_id !== userId);
+        saveToStorage(STORAGE_OPTIONS_KEY, [...otherUsersOptions, ...data.options]);
+      }
       return { synced: true };
     }
   } catch (e) {
     console.warn('Sync with server skipped (offline mode):', e);
   }
   return { synced: false };
+}
+
+
+export async function syncUserOptionsWithServer(userId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/user-options?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!Array.isArray(data.options)) return false;
+    const existing = getFromStorage<UserOption[]>(STORAGE_OPTIONS_KEY, []);
+    const otherUsersOptions = existing.filter(o => o.user_id !== userId);
+    saveToStorage(STORAGE_OPTIONS_KEY, [...otherUsersOptions, ...data.options]);
+    return true;
+  } catch (e) {
+    console.warn('User transaction options sync skipped:', e);
+    return false;
+  }
 }
 
 // ---------------- USER DATABASE OPERATIONS ----------------
@@ -264,7 +326,9 @@ export async function resetUserDataOnServer(userId: string): Promise<boolean> {
 // ---------------- CATEGORY OPERATIONS ----------------
 export function getCategories(userId: string): Category[] {
   const all = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
-  return all.filter(c => c.user_id === userId);
+  return all
+    .filter(c => c.user_id === userId)
+    .sort((a, b) => (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER));
 }
 
 export async function addCategory(
@@ -276,6 +340,7 @@ export async function addCategory(
     ...data,
     id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     user_id: userId,
+    position: all.filter(c => c.user_id === userId && c.type === data.type).length,
   };
   all.push(newCat);
   saveToStorage(STORAGE_CATEGORIES_KEY, all);
@@ -324,6 +389,107 @@ export async function deleteCategory(userId: string, categoryId: string): Promis
     return { success: true, synced: true };
   } catch (err) {
     console.warn('Neon deleteCategory sync warning:', err);
+    return { success: true, synced: false, error: 'Terhapus lokal, tapi koneksi ke database Neon gagal.' };
+  }
+}
+
+
+// ---------------- CATEGORY & TRANSACTION OPTION OPERATIONS ----------------
+export async function reorderCategories(userId: string, categoryIds: string[]): Promise<MutationResult> {
+  const all = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
+  const owned = new Set(all.filter(c => c.user_id === userId).map(c => c.id));
+  if (categoryIds.some(id => !owned.has(id))) {
+    return { success: false, synced: false, error: 'Kategori tidak valid untuk akun ini.' };
+  }
+
+  const positions = new Map(categoryIds.map((id, index) => [id, index]));
+  const next = all.map(cat =>
+    positions.has(cat.id) ? { ...cat, position: positions.get(cat.id)! } : cat
+  );
+  saveToStorage(STORAGE_CATEGORIES_KEY, next);
+
+  try {
+    const res = await fetch('/api/categories/reorder', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, category_ids: categoryIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: true, synced: false, error: err.error || 'Urutan tersimpan lokal, tapi gagal disinkron ke Neon.' };
+    }
+    return { success: true, synced: true };
+  } catch {
+    return { success: true, synced: false, error: 'Urutan tersimpan lokal, tapi koneksi ke database Neon gagal.' };
+  }
+}
+
+export function getUserOptions(userId: string, kind?: UserOptionKind): UserOption[] {
+  const all = getFromStorage<UserOption[]>(STORAGE_OPTIONS_KEY, []);
+  return all
+    .filter(o => o.user_id === userId && (!kind || o.kind === kind))
+    .sort((a, b) => a.position - b.position);
+}
+
+export async function addUserOption(
+  userId: string,
+  kind: UserOptionKind,
+  value: string
+): Promise<MutationResult<UserOption>> {
+  const clean = value.trim();
+  if (!clean) return { success: false, synced: false, error: 'Nilai tidak boleh kosong.' };
+
+  const all = getFromStorage<UserOption[]>(STORAGE_OPTIONS_KEY, []);
+  const duplicate = all.find(
+    o => o.user_id === userId && o.kind === kind && o.value.toLowerCase() === clean.toLowerCase()
+  );
+  if (duplicate) return { success: true, data: duplicate, synced: true };
+
+  const position = all.filter(o => o.user_id === userId && o.kind === kind).length;
+  const option: UserOption = {
+    id: `opt_${kind}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    user_id: userId,
+    kind,
+    value: clean,
+    position,
+    created_at: new Date().toISOString(),
+  };
+  saveToStorage(STORAGE_OPTIONS_KEY, [...all, option]);
+
+  try {
+    const res = await fetch('/api/user-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(option),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: true, data: option, synced: false, error: err.error || 'Pilihan tersimpan lokal, tapi gagal disinkron ke Neon.' };
+    }
+    return { success: true, data: option, synced: true };
+  } catch {
+    return { success: true, data: option, synced: false, error: 'Pilihan tersimpan lokal, tapi koneksi ke database Neon gagal.' };
+  }
+}
+
+export async function deleteUserOption(userId: string, id: string): Promise<MutationResult> {
+  const all = getFromStorage<UserOption[]>(STORAGE_OPTIONS_KEY, []);
+  const item = all.find(o => o.id === id && o.user_id === userId);
+  if (!item) return { success: false, synced: false, error: 'Pilihan tidak ditemukan.' };
+
+  saveToStorage(STORAGE_OPTIONS_KEY, all.filter(o => !(o.id === id && o.user_id === userId)));
+
+  try {
+    const res = await fetch(
+      `/api/user-options/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: true, synced: false, error: err.error || 'Terhapus lokal, tapi gagal disinkron ke Neon.' };
+    }
+    return { success: true, synced: true };
+  } catch {
     return { success: true, synced: false, error: 'Terhapus lokal, tapi koneksi ke database Neon gagal.' };
   }
 }

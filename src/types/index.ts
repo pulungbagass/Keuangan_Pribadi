@@ -21,6 +21,18 @@ export interface Category {
   icon_color: string;
   icon_name?: string;
   is_default?: boolean;
+  position?: number;
+}
+
+export type UserOptionKind = 'payment_method' | 'tag';
+
+export interface UserOption {
+  id: string;
+  user_id: string;
+  kind: UserOptionKind;
+  value: string;
+  position: number;
+  created_at?: string;
 }
 
 export interface TransactionDetails {

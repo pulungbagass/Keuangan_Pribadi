@@ -30,10 +30,26 @@ CREATE TABLE IF NOT EXISTS categories (
     icon_color VARCHAR(30) DEFAULT '#059669',
     icon_name VARCHAR(50) DEFAULT 'Tag',
     is_default BOOLEAN DEFAULT FALSE,
+    position INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Tabel Transactions (Pencatatan arus kas dengan presisi detik & JSONB)
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;
+
+-- 4. Tabel User Transaction Options (terisolasi per user)
+CREATE TABLE IF NOT EXISTS user_transaction_options (
+    id VARCHAR(128) PRIMARY KEY,
+    user_id VARCHAR(128) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind VARCHAR(30) NOT NULL CHECK (kind IN ('payment_method', 'tag')),
+    value VARCHAR(150) NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_transaction_options_value
+    ON user_transaction_options (user_id, kind, lower(value));
+
+-- 5. Tabel Transactions (Pencatatan arus kas dengan presisi detik & JSONB)
 CREATE TABLE IF NOT EXISTS transactions (
     id VARCHAR(128) PRIMARY KEY,
     user_id VARCHAR(128) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -45,7 +61,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Tabel Reminders (Pengingat agenda tagihan masa depan)
+-- 6. Tabel Reminders (Pengingat agenda tagihan masa depan)
 CREATE TABLE IF NOT EXISTS reminders (
     id VARCHAR(128) PRIMARY KEY,
     user_id VARCHAR(128) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -57,7 +73,7 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Optimasi Indeks Pencarian & Filter Cepat (Indexing)
+-- 7. Optimasi Indeks Pencarian & Filter Cepat (Indexing)
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date 
     ON transactions (user_id, transaction_date DESC);
 

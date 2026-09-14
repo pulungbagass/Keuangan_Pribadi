@@ -48,8 +48,34 @@ export async function ensureTablesExist(): Promise<{ ok: boolean; message?: stri
         icon_color VARCHAR(30) DEFAULT '#059669',
         icon_name VARCHAR(50) DEFAULT 'Tag',
         is_default BOOLEAN DEFAULT FALSE,
+        position INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
+    `;
+
+    await sql`
+      ALTER TABLE categories ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_transaction_options (
+        id VARCHAR(128) PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        kind VARCHAR(30) NOT NULL CHECK (kind IN ('payment_method', 'tag')),
+        value VARCHAR(150) NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_user_transaction_options_user_kind
+      ON user_transaction_options (user_id, kind, position);
+    `;
+
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_user_transaction_options_value
+      ON user_transaction_options (user_id, kind, lower(value));
     `;
 
     await sql`
