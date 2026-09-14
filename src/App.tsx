@@ -15,7 +15,8 @@ import {
   deleteReminder,
   deleteTransaction,
   deleteCategory,
-  reorderCategories,
+  reorderCategoriesLocal,
+  syncCategoryOrderToServer,
   getUserOptions,
   addUserOption,
   deleteUserOption,
@@ -165,10 +166,25 @@ export default function App() {
 
   const handleReorderCategories = async (ids: string[]): Promise<{ success: boolean; error?: string }> => {
     if (!session?.user) return { success: false, error: 'Sesi tidak ditemukan.' };
-    const result = await reorderCategories(session.user.id, ids);
-    if (!result.synced && result.error) showError(result.error);
+
+    // Apply the new order locally first and reflect it in the UI immediately,
+    // instead of waiting for the Neon round-trip (that wait was the cause of
+    // the multi-second delay before the drag-and-drop reorder appeared).
+    const local = reorderCategoriesLocal(session.user.id, ids);
+    if (!local.success) {
+      showError(local.error || 'Gagal mengubah urutan kategori.');
+      return { success: false, error: local.error };
+    }
     setCategories(getCategories(session.user.id));
-    return { success: result.success, error: result.synced ? undefined : result.error };
+
+    // Sync the confirmed order to Neon in the background. If it fails, the
+    // local order is still correct; only surface an error toast, and make
+    // sure the next background full-sync doesn't overwrite it with stale data.
+    syncCategoryOrderToServer(session.user.id, ids).then(result => {
+      if (!result.synced && result.error) showError(result.error);
+    });
+
+    return { success: true };
   };
 
   const handleAddOption = async (

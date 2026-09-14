@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { Category, Transaction, TransactionType } from '../types';
-import { formatDateIndo, formatRupiah, formatTimeIndo } from '../utils/format';
+import { formatDateIndo, formatRupiah, formatTimeIndo, getLocalDateKey } from '../utils/format';
 import { CategoryIcon } from '../components/common/CategoryIcon';
 import { exportTransactionsToCSV } from '../services/storage';
 
@@ -84,7 +84,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const groupedByDate = useMemo(() => {
     const groups: Record<string, Transaction[]> = {};
     filteredTransactions.forEach(tx => {
-      const dateKey = tx.transaction_date.split('T')[0];
+      // Use the LOCAL calendar date, not the raw UTC date, so a transaction
+      // made e.g. at 05:00 WIB lands under today's date, not yesterday's.
+      const dateKey = getLocalDateKey(tx.transaction_date);
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
@@ -94,7 +96,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   }, [filteredTransactions]);
 
   const handleExportCSV = () => {
-    const fileName = `riwayat_keuangan_${new Date().toISOString().split('T')[0]}.csv`;
+    const fileName = `riwayat_keuangan_${getLocalDateKey(new Date().toISOString())}.csv`;
     exportTransactionsToCSV(filteredTransactions, categoryDict, fileName);
   };
 

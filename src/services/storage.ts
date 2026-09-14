@@ -395,11 +395,18 @@ export async function deleteCategory(userId: string, categoryId: string): Promis
 
 
 // ---------------- CATEGORY & TRANSACTION OPTION OPERATIONS ----------------
-export async function reorderCategories(userId: string, categoryIds: string[]): Promise<MutationResult> {
+
+// Applies the new order to localStorage immediately (synchronous, no network
+// wait) so the UI can reflect the drag-and-drop result instantly instead of
+// only updating after the Neon round-trip resolves.
+export function reorderCategoriesLocal(
+  userId: string,
+  categoryIds: string[]
+): { success: boolean; error?: string } {
   const all = getFromStorage<Category[]>(STORAGE_CATEGORIES_KEY, []);
   const owned = new Set(all.filter(c => c.user_id === userId).map(c => c.id));
   if (categoryIds.some(id => !owned.has(id))) {
-    return { success: false, synced: false, error: 'Kategori tidak valid untuk akun ini.' };
+    return { success: false, error: 'Kategori tidak valid untuk akun ini.' };
   }
 
   const positions = new Map(categoryIds.map((id, index) => [id, index]));
@@ -407,7 +414,11 @@ export async function reorderCategories(userId: string, categoryIds: string[]): 
     positions.has(cat.id) ? { ...cat, position: positions.get(cat.id)! } : cat
   );
   saveToStorage(STORAGE_CATEGORIES_KEY, next);
+  return { success: true };
+}
 
+// Syncs the already-applied local order to Neon in the background.
+export async function syncCategoryOrderToServer(userId: string, categoryIds: string[]): Promise<MutationResult> {
   try {
     const res = await fetch('/api/categories/reorder', {
       method: 'PATCH',
@@ -422,6 +433,15 @@ export async function reorderCategories(userId: string, categoryIds: string[]): 
   } catch {
     return { success: true, synced: false, error: 'Urutan tersimpan lokal, tapi koneksi ke database Neon gagal.' };
   }
+}
+
+// Kept for backward compatibility: applies locally, then awaits the Neon sync.
+export async function reorderCategories(userId: string, categoryIds: string[]): Promise<MutationResult> {
+  const local = reorderCategoriesLocal(userId, categoryIds);
+  if (!local.success) {
+    return { success: false, synced: false, error: local.error };
+  }
+  return syncCategoryOrderToServer(userId, categoryIds);
 }
 
 export function getUserOptions(userId: string, kind?: UserOptionKind): UserOption[] {

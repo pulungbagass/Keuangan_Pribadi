@@ -188,7 +188,7 @@ app.get('/api/user-data', async (req, res) => {
 
     const [txs, cats, rems] = (await Promise.all([
       sql`SELECT * FROM transactions WHERE user_id = ${userId} ORDER BY transaction_date DESC`,
-      sql`SELECT * FROM categories WHERE user_id = ${userId} ORDER BY name ASC`,
+      sql`SELECT * FROM categories WHERE user_id = ${userId} ORDER BY position ASC, name ASC`,
       sql`SELECT * FROM reminders WHERE user_id = ${userId} ORDER BY due_date ASC`,
     ])) as [any[], any[], any[]];
 
@@ -211,6 +211,9 @@ app.get('/api/user-data', async (req, res) => {
       icon_color: c.icon_color,
       icon_name: c.icon_name,
       is_default: Boolean(c.is_default),
+      // Position must be included so a client sync doesn't clobber a
+      // previously saved drag-and-drop order with the DB's default order.
+      position: c.position != null ? Number(c.position) : 0,
     }));
 
     const formattedRems = rems.map(r => ({

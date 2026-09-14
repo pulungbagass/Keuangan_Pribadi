@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Bell, Calendar, DollarSign, FileText, Loader2 } from 'lucide-react';
 import { Reminder } from '../../types';
+import { getLocalDateKey } from '../../utils/format';
 
 interface ReminderModalProps {
   isOpen: boolean;
@@ -18,7 +19,9 @@ export const ReminderModal: React.FC<ReminderModalProps> = ({
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 3);
-    return d.toISOString().split('T')[0];
+    // Use the local calendar date, not UTC, so this doesn't land a day early
+    // for users ahead of UTC (e.g. WIB/UTC+7) during early morning hours.
+    return getLocalDateKey(d.toISOString());
   });
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
